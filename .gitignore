@@ -7,11 +7,14 @@ cmake-build-minsizerel
 cmake-build-relwithdebinfo
 build
 
-data
+build/
+extern/GKlib/
+extern/Jet-Partitioner/
 extern/kokkos-4.7.00/
 extern/kokkos-kernels-4.7.00/
-build/
-extern/local
+extern/local/
+extern/METIS/
+
 results.csv
 coarse_graphs.out
 coarse_part.out
