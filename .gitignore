@@ -1,0 +1,17 @@
+.idea
+.vscode
+
+cmake-build-debug
+cmake-build-release
+cmake-build-minsizerel
+cmake-build-relwithdebinfo
+build
+
+data
+extern/kokkos-4.7.00/
+extern/kokkos-kernels-4.7.00/
+build/
+extern/local
+results.csv
+coarse_graphs.out
+coarse_part.out
