@@ -333,7 +333,7 @@ namespace GPU_HeiProMap {
         );
 
         TIME("refine", "jetlp", "set_locked",
-             Kokkos::deep_copy(lp.locked, 0);
+             Kokkos::deep_copy(lp.locked, lp.to_move);
              Kokkos::fence();
         );
 
