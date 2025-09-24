@@ -129,12 +129,14 @@ namespace GPU_HeiProMap {
             std::cout << combined_JSON << std::endl;
 
             // Save to file
-            std::ofstream outFile(config.statistics_out);
-            if (outFile.is_open()) {
-                outFile << combined_JSON;
-                outFile.close();
-            } else {
-                std::cerr << "Error: Could not open " << config.statistics_out << " to write statistics!" << std::endl;
+            if (config.is_set("--statistics")) {
+                std::ofstream outFile(config.statistics_out);
+                if (outFile.is_open()) {
+                    outFile << combined_JSON;
+                    outFile.close();
+                } else {
+                    std::cerr << "Error: Could not open " << config.statistics_out << " to write statistics!" << std::endl;
+                }
             }
 
             return host_partition;
