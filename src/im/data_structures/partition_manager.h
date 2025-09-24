@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -27,7 +27,7 @@
 #ifndef GPU_HEIPROMAP_PARTITION_MANAGER_H
 #define GPU_HEIPROMAP_PARTITION_MANAGER_H
 
-#include "definitions.h"
+#include "../../utility/definitions.h"
 
 namespace GPU_HeiProMap {
     struct PartitionManager {

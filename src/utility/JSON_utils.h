@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of SharedMap_GPU.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -24,13 +24,13 @@
  * SOFTWARE.
  ******************************************************************************/
 
-#ifndef SHAREDMAP_GPU_JSON_UTILS_H
-#define SHAREDMAP_GPU_JSON_UTILS_H
+#ifndef GPU_HEIPROMAP_JSON_UTILS_H
+#define GPU_HEIPROMAP_JSON_UTILS_H
 
 #include "definitions.h"
 #include "util.h"
 
-namespace SharedMap_GPU {
+namespace GPU_HeiProMap {
 #define to_JSON_MACRO(x) (std::string("\"") + (#x) + "\" : " + to_JSON_value(x) + ",\n")
 
     std::string to_JSON_value(u8 x);
@@ -73,4 +73,4 @@ namespace SharedMap_GPU {
     }
 }
 
-#endif //SHAREDMAP_GPU_JSON_UTILS_H
+#endif //GPU_HEIPROMAP_JSON_UTILS_H

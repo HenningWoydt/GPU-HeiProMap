@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -28,22 +28,21 @@
 #define GPU_HEIPROMAP_SOLVER_H
 
 #include <iomanip>
+#include <utility>
 
-#include "definitions.h"
-#include "distance_oracle.h"
-#include "failsafe_rebalancer.h"
-#include "global_swap_refinement.h"
-#include "heavy_edge_matching.h"
-#include "jet_label_propagation.h"
-#include "partition_manager.h"
-#include "gpu_assert.h"
-#include "kaffpa_initial_partition.h"
-#include "profiler.h"
-#include "swap_refinement.h"
+#include "../utility/definitions.h"
+#include "../utility/configuration.h"
+#include "data_structures/distance_oracle.h"
+#include "matching/heavy_edge_matching.h"
+#include "refinement/jet_label_propagation.h"
+#include "data_structures/partition_manager.h"
+#include "utility/gpu_assert.h"
+#include "partitioning/kaffpa_initial_partition.h"
+#include "../utility/profiler.h"
 
 
 namespace GPU_HeiProMap {
-    class Solver {
+    class IM_Solver {
     public:
         Configuration config;
         weight_t lmax = 0;
@@ -63,12 +62,9 @@ namespace GPU_HeiProMap {
         f64 time_initial_partition = 0;
         f64 time_uncoarsening = 0;
         f64 time_refinement = 0;
-        f64 time_fs_rebalancer = 0;
 
 
-        explicit Solver(const Configuration &t_config) {
-            config = t_config;
-
+        explicit IM_Solver(Configuration t_config) : config(std::move(t_config)) {
             PROFILE(time_io, io());
             PROFILE(time_init, initialize());
         }
@@ -121,10 +117,6 @@ namespace GPU_HeiProMap {
                 PROFILE(time_refinement, refinement(max_level, level));
 
                 // std::cout << "Level  " << level << " " << device_graphs.back().n << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
-            }
-
-            if (max_weight(p_manager) > lmax) {
-                PROFILE(time_fs_rebalancer, rebalance(device_graphs.back(), d_oracle, p_manager));
             }
 
             std::cout << "Final     " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
@@ -204,7 +196,7 @@ namespace GPU_HeiProMap {
         }
 
         void print_times() const {
-            f64 total_time = time_io + time_init + time_matching + time_coarsening + time_initial_partition + time_uncoarsening + time_refinement + time_fs_rebalancer;
+            f64 total_time = time_io + time_init + time_matching + time_coarsening + time_initial_partition + time_uncoarsening + time_refinement;
 
             std::cout << std::fixed << std::setprecision(3);
             std::cout << "================ Timing Breakdown ================\n";
@@ -217,7 +209,6 @@ namespace GPU_HeiProMap {
             std::cout << std::setw(25) << "Initial Partition" << std::setw(12) << time_initial_partition << (time_initial_partition / total_time) * 100 << "%\n";
             std::cout << std::setw(25) << "Uncoarsening" << std::setw(12) << time_uncoarsening << (time_uncoarsening / total_time) * 100 << "%\n";
             std::cout << std::setw(25) << "Refinement" << std::setw(12) << time_refinement << (time_refinement / total_time) * 100 << "%\n";
-            std::cout << std::setw(25) << "FS Rebalance" << std::setw(12) << time_fs_rebalancer << (time_fs_rebalancer / total_time) * 100 << "%\n";
             std::cout << "--------------------------------------------------\n";
             std::cout << std::setw(25) << "Total" << std::setw(12) << total_time << "100.0%\n";
             std::cout << "==================================================\n";

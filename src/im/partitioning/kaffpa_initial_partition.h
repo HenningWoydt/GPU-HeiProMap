@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -29,9 +29,9 @@
 
 #include "interface/kaHIP_interface.h"
 
-#include "definitions.h"
-#include "device_graph.h"
-#include "partition_manager.h"
+#include "../../utility/definitions.h"
+#include "../data_structures/device_graph.h"
+#include "../data_structures/partition_manager.h"
 
 namespace GPU_HeiProMap {
     inline f64 determine_adaptive_imbalance(const f64 global_imbalance,

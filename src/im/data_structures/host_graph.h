@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -30,8 +30,8 @@
 #include <iostream>
 #include <regex>
 
-#include "definitions.h"
-#include "util.h"
+#include "../../utility/definitions.h"
+#include "../../utility/util.h"
 
 namespace GPU_HeiProMap {
     class HostGraph {

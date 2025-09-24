@@ -31,6 +31,8 @@
 
 #include <Kokkos_Core.hpp>
 
+#include <jet.h>
+
 namespace GPU_HeiProMap {
     typedef int8_t s8;
     typedef int16_t s16;
@@ -44,6 +46,17 @@ namespace GPU_HeiProMap {
 
     typedef float f32;
     typedef double f64;
+
+    using JetDeviceRowMap = Kokkos::View<jet_partitioner::edge_offset_t *, jet_partitioner::Device>;
+    using JetDeviceEntries = Kokkos::View<jet_partitioner::ordinal_t *, jet_partitioner::Device>;
+    using JetDeviceValues = Kokkos::View<jet_partitioner::value_t *, jet_partitioner::Device>;
+    using JetDeviceWeights = Kokkos::View<jet_partitioner::value_t *, jet_partitioner::Device>;
+    using JetDevicePartition = Kokkos::View<jet_partitioner::part_t *, jet_partitioner::Device>;
+    using JetHostRowMap = Kokkos::View<jet_partitioner::edge_offset_t *, Kokkos::HostSpace>;
+    using JetHostEntries = Kokkos::View<jet_partitioner::ordinal_t *, Kokkos::HostSpace>;
+    using JetHostValues = Kokkos::View<jet_partitioner::value_t *, Kokkos::HostSpace>;
+    using JetHostWeights = Kokkos::View<jet_partitioner::value_t *, Kokkos::HostSpace>;
+    using JetHostPartition = Kokkos::View<jet_partitioner::part_t *, Kokkos::HostSpace>;
 
     typedef u32 vertex_t;
     typedef s64 weight_t;

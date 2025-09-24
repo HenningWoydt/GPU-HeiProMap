@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of SharedMap_GPU.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -24,28 +24,28 @@
  * SOFTWARE.
  ******************************************************************************/
 
-#include "JSON_utils.h"
+#ifndef GPU_HEIPROMAP_MACROS_H
+#define GPU_HEIPROMAP_MACROS_H
 
-namespace SharedMap_GPU {
-    std::string to_JSON_value(const u8 x) { return std::to_string(x); }
+namespace GPU_HeiProMap {
+#ifndef ASSERT_ENABLED
+#define ASSERT_ENABLED false
+#endif
 
-    std::string to_JSON_value(const u16 x) { return std::to_string(x); }
+#if (ASSERT_ENABLED)
+#define ASSERT(condition) if(!(condition)) {std::cerr << "Error in file " << __FILE__ << " in function " << __FUNCTION__ << " at line " << __LINE__ << "!" << std::endl; abort(); } ((void)0)
+#else
+#define ASSERT(condition) if(!(condition)) {((void)0); } ((void)0)
+#endif
 
-    std::string to_JSON_value(const u32 x) { return std::to_string(x); }
 
-    std::string to_JSON_value(const u64 x) { return std::to_string(x); }
-
-    std::string to_JSON_value(const s8 x) { return std::to_string(x); }
-
-    std::string to_JSON_value(const s16 x) { return std::to_string(x); }
-
-    std::string to_JSON_value(const s32 x) { return std::to_string(x); }
-
-    std::string to_JSON_value(const s64 x) { return std::to_string(x); }
-
-    std::string to_JSON_value(const f32 x) { return std::to_string(x); }
-
-    std::string to_JSON_value(const f64 x) { return std::to_string(x); }
-
-    std::string to_JSON_value(const std::string &s) { return "\"" + s + "\""; }
+#define PROFILE(var, statement)                          \
+{                                                      \
+auto __start = std::chrono::high_resolution_clock::now(); \
+statement;                                         \
+auto __end = std::chrono::high_resolution_clock::now();   \
+var += get_seconds(__start, __end); \
 }
+}
+
+#endif //GPU_HEIPROMAP_MACROS_H

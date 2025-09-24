@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -29,9 +29,9 @@
 
 #include <unordered_set>
 
-#include "definitions.h"
-#include "distance_oracle.h"
-#include "host_graph.h"
+#include "../../utility/definitions.h"
+#include "../data_structures/distance_oracle.h"
+#include "../data_structures/host_graph.h"
 
 namespace GPU_HeiProMap {
     inline void assert_no_loops(const HostGraph &host_g) {

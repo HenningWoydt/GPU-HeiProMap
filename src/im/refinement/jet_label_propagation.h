@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -27,13 +27,13 @@
 #ifndef GPU_HEIPROMAP_LABEL_PROPAGATION_H
 #define GPU_HEIPROMAP_LABEL_PROPAGATION_H
 
-#include "comm_cost.h"
-#include "definitions.h"
-#include "device_graph.h"
-#include "distance_oracle.h"
-#include "large_vertex_partition_csr.h"
-#include "partition_manager.h"
-#include "profiler.h"
+#include "../utility/comm_cost.h"
+#include "../../utility/definitions.h"
+#include "../data_structures/device_graph.h"
+#include "../data_structures/distance_oracle.h"
+#include "../data_structures/large_vertex_partition_csr.h"
+#include "../data_structures/partition_manager.h"
+#include "../../utility/profiler.h"
 
 namespace GPU_HeiProMap {
     struct LabelPropagationStruct {

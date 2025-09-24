@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -12,8 +12,8 @@
  * copies of the Software, and to permit persons to whom the Software is
  * furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- *all copies or substantial portions of the Software.
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -27,9 +27,10 @@
 #ifndef GPU_HEIPROMAP_HEAVY_EDGE_MATCHING_H
 #define GPU_HEIPROMAP_HEAVY_EDGE_MATCHING_H
 
-#include "definitions.h"
-#include "device_graph.h"
-#include "profiler.h"
+#include "../../utility/definitions.h"
+#include "../data_structures/device_graph.h"
+#include "../data_structures/partition_manager.h"
+#include "../../utility/profiler.h"
 
 namespace GPU_HeiProMap {
     KOKKOS_INLINE_FUNCTION

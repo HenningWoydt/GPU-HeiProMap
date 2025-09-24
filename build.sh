@@ -231,6 +231,10 @@ cd "${ROOT}"
 # --- build jet ---
 echo "Building Jet-Partitioner..."
 if (
+  sed -i \
+    -e '/^[[:space:]]*std::cout << "Initial " << std::fixed << (best_state.cut \/ 2) << " " << std::setprecision(6) << (static_cast<double>(best_state.total_imb) \/ static_cast<double>(prob.opt)) << " ";$/ s|^|// |' \
+    -e '/^[[:space:]]*std::cout << g.numRows() << std::endl;$/ s|^|// |' \
+    "${ROOT}/extern/Jet-Partitioner/src/jet_refiner.hpp"
   cd "${ROOT}/extern/Jet-Partitioner" \
   && rm -rf build && mkdir build && cd build \
   && cmake .. \

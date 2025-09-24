@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -33,6 +33,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "definitions.h"
 
@@ -114,6 +115,28 @@ namespace GPU_HeiProMap {
         ints.resize(idx);
     }
 
+    inline void str_to_ints(const std::string &str,
+                            std::vector<int> &ints) {
+        ints.resize(str.size());
+
+        size_t idx = 0;
+        int curr_number = 0;
+
+        for (const char c: str) {
+            if (c == ' ') {
+                ints[idx] = curr_number;
+                idx += curr_number != 0;
+                curr_number = 0;
+            } else {
+                curr_number = curr_number * 10 + (int) (c - '0');
+            }
+        }
+
+        ints[idx] = curr_number;
+        idx += curr_number != 0;
+        ints.resize(idx);
+    }
+
     inline auto get_time_point() {
         return std::chrono::high_resolution_clock::now();
     }
@@ -137,8 +160,7 @@ namespace GPU_HeiProMap {
         }
 
         for (std::size_t i = 0; i < size; ++i) {
-            std::cout << std::fixed << std::setprecision(3)
-                    << static_cast<ValueType>(host_view(i)) << " ";
+            std::cout << std::fixed << std::setprecision(3) << static_cast<ValueType>(host_view(i)) << " ";
         }
         std::cout << std::endl;
     }
@@ -250,6 +272,17 @@ namespace GPU_HeiProMap {
         return p;
     }
 
+    template<typename T>
+    T max(const std::vector<T> &vec) {
+        T p = vec[0];
+
+        for (auto &x: vec) {
+            p = std::max(p, x);
+        }
+
+        return p;
+    }
+
     inline void write_partition(const std::vector<partition_t> &partition, const std::string &file_path) {
         std::ofstream out(file_path, std::ios::binary); // Open file in binary mode for faster writing
         if (!out.is_open()) return; // Ensure the file is open before proceeding
@@ -289,7 +322,7 @@ namespace GPU_HeiProMap {
 
     template<typename T>
     u64 count_neq_occurrences(Kokkos::View<T *, DeviceMemorySpace> &view,
-                          T needle) {
+                              T needle) {
         u64 result = 0;
         Kokkos::parallel_reduce("count_occurrences", view.size(), KOKKOS_LAMBDA(const u64 i, u64 &local) {
                                     if (view(i) != needle) local += 1ULL;

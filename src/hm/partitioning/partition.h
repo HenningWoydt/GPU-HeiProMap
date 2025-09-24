@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of SharedMap_GPU.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -24,18 +24,18 @@
  * SOFTWARE.
  ******************************************************************************/
 
-#ifndef SHAREDMAP_GPU_PARTITION_H
-#define SHAREDMAP_GPU_PARTITION_H
+#ifndef GPU_HEIPROMAP_PARTITION_H
+#define GPU_HEIPROMAP_PARTITION_H
 
-#include "../datastructures/device_graph.h"
-#include "../utility/definitions.h"
+#include "../datastructures/hm_device_graph.h"
+#include "../../utility/definitions.h"
 
-namespace SharedMap_GPU {
-    struct Item {
-        DeviceGraph device_g;
+namespace GPU_HeiProMap {
+    struct HM_Item {
+        HM_DeviceGraph device_g;
         std::vector<int> identifier;
-        DeviceEntries o_to_n;
-        DeviceEntries n_to_o;
+        JetDeviceEntries o_to_n;
+        JetDeviceEntries n_to_o;
     };
 
     class DeviceScratchMemory {
@@ -57,7 +57,7 @@ namespace SharedMap_GPU {
         }
     };
 
-    inline DevicePartition jet_partition_serial(DeviceGraph &device_g,
+    inline JetDevicePartition jet_partition_serial(HM_DeviceGraph &device_g,
                                                 int k,
                                                 f64 imbalance,
                                                 int seed,
@@ -81,19 +81,19 @@ namespace SharedMap_GPU {
                                                                                data);
 
         // Allocate and copy to device
-        DevicePartition device_partition("device_partition", partition.extent(0));
+        JetDevicePartition device_partition("device_partition", partition.extent(0));
         Kokkos::deep_copy(device_partition, partition);
 
         return device_partition;
     }
 
-    inline DevicePartition jet_partition(DeviceGraph &device_g,
+    inline JetDevicePartition jet_partition(HM_DeviceGraph &device_g,
                                          int k,
                                          f64 imbalance,
                                          int seed,
                                          bool use_ultra) {
         if (k == 1) {
-            DevicePartition partition("k=1 partition", device_g.n);
+            JetDevicePartition partition("k=1 partition", device_g.n);
             Kokkos::deep_copy(partition, 0);
             return partition;
         }
@@ -110,7 +110,7 @@ namespace SharedMap_GPU {
         jet_partitioner::experiment_data<jet_partitioner::value_t> data;
 
         jet_partitioner::matrix_t mtx = device_g.get_mtx();
-        DevicePartition partition = jet_partitioner::partition(edge_cut,
+        JetDevicePartition partition = jet_partitioner::partition(edge_cut,
                                                                config,
                                                                mtx,
                                                                device_g.vertex_weights,
@@ -132,20 +132,20 @@ namespace SharedMap_GPU {
         return local_imbalance;
     }
 
-    inline void create_one_subgraph_host(DeviceGraph &device_g,
-                                         DeviceEntries &n_to_o, // maps local to global
+    inline void create_one_subgraph_host(HM_DeviceGraph &device_g,
+                                         JetDeviceEntries &n_to_o, // maps local to global
                                          int id, // target partition
-                                         DevicePartition &device_partition,
+                                         JetDevicePartition &device_partition,
                                          std::vector<int> &identifier,
                                          int global_n,
-                                         std::vector<Item> &stack) {
+                                         std::vector<HM_Item> &stack) {
         // Copy the device to the host
-        HostGraph host_g = convert(device_g);
+        HM_HostGraph host_g = convert(device_g);
 
-        HostPartition host_partition = Kokkos::create_mirror_view(device_partition);
+        JetHostPartition host_partition = Kokkos::create_mirror_view(device_partition);
         Kokkos::deep_copy(host_partition, device_partition);
 
-        HostEntries host_n_to_o = Kokkos::create_mirror_view(n_to_o);
+        JetHostEntries host_n_to_o = Kokkos::create_mirror_view(n_to_o);
         Kokkos::deep_copy(host_n_to_o, n_to_o);
         Kokkos::fence();
 
@@ -166,8 +166,8 @@ namespace SharedMap_GPU {
         }
 
         // second pass, build translation table
-        HostEntries o_to_n_sub = HostEntries("o_to_n", global_n);
-        HostEntries n_to_o_sub = HostEntries("n_to_o", sub_n);
+        JetHostEntries o_to_n_sub = JetHostEntries("o_to_n", global_n);
+        JetHostEntries n_to_o_sub = JetHostEntries("n_to_o", sub_n);
 
         int counter = 0;
         for (int u = 0; u < n; ++u) {
@@ -182,7 +182,7 @@ namespace SharedMap_GPU {
         }
 
         // third pass, build the graph
-        HostGraph host_sub_g(sub_n, sub_m, sub_weight);
+        HM_HostGraph host_sub_g(sub_n, sub_m, sub_weight);
         host_sub_g.neighborhood(0) = 0;
 
         int idx = 0;
@@ -210,12 +210,12 @@ namespace SharedMap_GPU {
         }
 
         // upload from host to device
-        DeviceGraph device_sub_g(host_sub_g);
+        HM_DeviceGraph device_sub_g(host_sub_g);
 
-        DeviceEntries device_n_to_o_sub("device_n_to_o", n_to_o_sub.extent(0));
+        JetDeviceEntries device_n_to_o_sub("device_n_to_o", n_to_o_sub.extent(0));
         Kokkos::deep_copy(device_n_to_o_sub, n_to_o_sub);
 
-        DeviceEntries device_o_to_n_sub("device_o_to_n", o_to_n_sub.extent(0));
+        JetDeviceEntries device_o_to_n_sub("device_o_to_n", o_to_n_sub.extent(0));
         Kokkos::deep_copy(device_o_to_n_sub, o_to_n_sub);
         Kokkos::fence();
 
@@ -229,13 +229,13 @@ namespace SharedMap_GPU {
         stack.back().identifier.push_back(id);
     }
 
-    inline void create_one_subgraph_device(DeviceGraph &device_g,
-                                           DeviceEntries &n_to_o, // maps local to global
+    inline void create_one_subgraph_device(HM_DeviceGraph &device_g,
+                                           JetDeviceEntries &n_to_o, // maps local to global
                                            int id, // target partition
-                                           DevicePartition &device_partition,
+                                           JetDevicePartition &device_partition,
                                            std::vector<int> &identifier,
                                            int global_n,
-                                           std::vector<Item> &stack,
+                                           std::vector<HM_Item> &stack,
                                            DeviceScratchMemory &device_scratch_mem) {
         int n = device_g.n;
 
@@ -264,8 +264,8 @@ namespace SharedMap_GPU {
         );
 
         // second pass, build translation table
-        DeviceEntries o_to_n_sub = DeviceEntries("o_to_n", global_n);
-        DeviceEntries n_to_o_sub = DeviceEntries("n_to_o", sub_n);
+        JetDeviceEntries o_to_n_sub = JetDeviceEntries("o_to_n", global_n);
+        JetDeviceEntries n_to_o_sub = JetDeviceEntries("n_to_o", sub_n);
 
         Kokkos::View<int *> new_indices("new_indices", n);
         Kokkos::parallel_scan("PrefixSum", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(int u, int &update, const bool final) {
@@ -299,7 +299,7 @@ namespace SharedMap_GPU {
         });
 
 
-        DeviceGraph device_sub_g(sub_n, sub_m, sub_weight);
+        HM_DeviceGraph device_sub_g(sub_n, sub_m, sub_weight);
 
         Kokkos::parallel_for("BuildSubgraph", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(int u) {
             if (device_partition(u) != id) return;
@@ -334,13 +334,13 @@ namespace SharedMap_GPU {
         stack.back().identifier.push_back(id);
     }
 
-    inline void create_subgraphs_device(DeviceGraph &device_g,
-                                        DeviceEntries &n_to_o, // maps local to global
+    inline void create_subgraphs_device(HM_DeviceGraph &device_g,
+                                        JetDeviceEntries &n_to_o, // maps local to global
                                         int k,
-                                        DevicePartition &device_partition,
+                                        JetDevicePartition &device_partition,
                                         std::vector<int> &identifier,
                                         int global_n,
-                                        std::vector<Item> &stack,
+                                        std::vector<HM_Item> &stack,
                                         DeviceScratchMemory &device_scratch_mem) {
         int n = device_g.n;
 
@@ -380,8 +380,8 @@ namespace SharedMap_GPU {
             Kokkos::fence();
 
             // second pass, build translation table
-            DeviceEntries o_to_n_sub = DeviceEntries("o_to_n", global_n);
-            DeviceEntries n_to_o_sub = DeviceEntries("n_to_o", sub_n);
+            JetDeviceEntries o_to_n_sub = JetDeviceEntries("o_to_n", global_n);
+            JetDeviceEntries n_to_o_sub = JetDeviceEntries("n_to_o", sub_n);
 
             Kokkos::parallel_for("BuildTranslationTables", Kokkos::RangePolicy<>(0, sub_n), KOKKOS_LAMBDA(int idx) {
                 int u = device_scratch_mem.vertices_per_id(id * global_n + idx);
@@ -404,7 +404,7 @@ namespace SharedMap_GPU {
             Kokkos::fence();
 
 
-            DeviceGraph device_sub_g(sub_n, sub_m, sub_weight);
+            HM_DeviceGraph device_sub_g(sub_n, sub_m, sub_weight);
 
             Kokkos::parallel_for("BuildSubgraph", Kokkos::RangePolicy<>(0, sub_n), KOKKOS_LAMBDA(int idx) {
                 int u = device_scratch_mem.vertices_per_id(id * global_n + idx);
@@ -441,16 +441,16 @@ namespace SharedMap_GPU {
         }
     }
 
-    inline void create_subgraphs(DeviceGraph &device_g,
-                                 DeviceEntries &n_to_o,
+    inline void create_subgraphs(HM_DeviceGraph &device_g,
+                                 JetDeviceEntries &n_to_o,
                                  int k,
                                  jet_partitioner::part_vt &device_partition,
                                  std::vector<int> &identifier,
                                  int global_n,
-                                 std::vector<Item> &stack,
+                                 std::vector<HM_Item> &stack,
                                  DeviceScratchMemory &device_scratch_mem) {
         create_subgraphs_device(device_g, n_to_o, k, device_partition, identifier, global_n, stack, device_scratch_mem);
     }
 }
 
-#endif //SHAREDMAP_GPU_PARTITION_H
+#endif //GPU_HEIPROMAP_PARTITION_H

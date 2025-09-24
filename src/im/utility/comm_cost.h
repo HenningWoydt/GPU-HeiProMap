@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -27,11 +27,11 @@
 #ifndef GPU_HEIPROMAP_COMM_COST_H
 #define GPU_HEIPROMAP_COMM_COST_H
 
-#include "definitions.h"
-#include "device_graph.h"
-#include "distance_oracle.h"
-#include "large_vertex_partition_csr.h"
-#include "partition_manager.h"
+#include "../../utility/definitions.h"
+#include "../data_structures/device_graph.h"
+#include "../data_structures/distance_oracle.h"
+#include "../data_structures/large_vertex_partition_csr.h"
+#include "../data_structures/partition_manager.h"
 
 namespace GPU_HeiProMap {
     inline weight_t comm_cost(const Graph &device_g,

@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of SharedMap_GPU.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -24,8 +24,8 @@
  * SOFTWARE.
  ******************************************************************************/
 
-#ifndef SHAREDMAP_GPU_HOST_GRAPH_H
-#define SHAREDMAP_GPU_HOST_GRAPH_H
+#ifndef GPU_HEIPROMAP_HM_HOST_GRAPH_H
+#define GPU_HEIPROMAP_HM_HOST_GRAPH_H
 
 #include <string>
 #include <vector>
@@ -33,40 +33,40 @@
 #include <regex>
 #include <unordered_set>
 
-#include "../utility/definitions.h"
-#include "../utility/util.h"
+#include "../../utility/definitions.h"
+#include "../../utility/util.h"
 
-namespace SharedMap_GPU {
-    class HostGraph {
+namespace GPU_HeiProMap {
+    class HM_HostGraph {
     public:
         int n;
         int m;
         int graph_weight;
 
-        HostWeights vertex_weights;
-        HostRowMap neighborhood;
-        HostEntries edges_v;
-        HostValues edges_w;
+        JetHostWeights vertex_weights;
+        JetHostRowMap neighborhood;
+        JetHostEntries edges_v;
+        JetHostValues edges_w;
 
-        HostGraph() {
+        HM_HostGraph() {
             n            = 0;
             m            = 0;
             graph_weight = 0;
         }
 
-        HostGraph(const int t_n, const int t_m, const int t_weight) {
+        HM_HostGraph(const int t_n, const int t_m, const int t_weight) {
             n            = t_n;
             m            = t_m;
             graph_weight = t_weight;
 
-            vertex_weights = HostWeights("vertex_weights", n);
-            neighborhood   = HostRowMap("neighborhood", n + 1);
-            edges_v        = HostEntries("edges_v", m);
-            edges_w        = HostValues("edges_w", m);
+            vertex_weights = JetHostWeights("vertex_weights", n);
+            neighborhood   = JetHostRowMap("neighborhood", n + 1);
+            edges_v        = JetHostEntries("edges_v", m);
+            edges_w        = JetHostValues("edges_w", m);
         }
 
-        explicit HostGraph(const std::string& file_path) {
-            if (!file_exists(file_path)) {
+        explicit HM_HostGraph(const std::string& file_path) {
+            if (!GPU_HeiProMap::file_exists(file_path)) {
                 std::cerr << "File " << file_path << " does not exist!" << std::endl;
                 exit(EXIT_FAILURE);
             }
@@ -90,17 +90,17 @@ namespace SharedMap_GPU {
                 line = std::regex_replace(line, std::regex("\\s{2,}"), " ");
 
                 // read in header
-                std::vector<std::string> header = split(line, ' ');
+                std::vector<std::string> header = GPU_HeiProMap::split(line, ' ');
                 n                               = std::stoi(header[0]);
                 m                               = std::stoi(header[1]) * 2;
 
                 // allocate space
                 graph_weight    = 0;
-                vertex_weights  = HostWeights("vertex_weights", n);
-                neighborhood    = HostRowMap("neighborhood", n + 1);
+                vertex_weights  = JetHostWeights("vertex_weights", n);
+                neighborhood    = JetHostRowMap("neighborhood", n + 1);
                 neighborhood(0) = 0;
-                edges_v         = HostEntries("edges_v", m);
-                edges_w         = HostValues("edges_w", m);
+                edges_v         = JetHostEntries("edges_v", m);
+                edges_w         = JetHostValues("edges_w", m);
 
                 // read in header
                 std::string fmt = "000";
@@ -121,7 +121,7 @@ namespace SharedMap_GPU {
             while (std::getline(file, line)) {
                 if (line[0] == '%') { continue; }
                 // convert the lines into ints
-                str_to_ints(line, ints);
+                GPU_HeiProMap::str_to_ints(line, ints);
 
                 size_t i = 0;
 
@@ -161,7 +161,7 @@ namespace SharedMap_GPU {
         int weight(const int u, const size_t i) const { return edges_w(neighborhood(u) + i); }
     };
 
-    inline bool validate_host_graph(const HostGraph& g) {
+    inline bool validate_host_graph(const HM_HostGraph& g) {
         using edge_offset_t = jet_partitioner::edge_offset_t;
         using ordinal_t     = jet_partitioner::ordinal_t;
         using value_t       = jet_partitioner::value_t;
@@ -238,7 +238,7 @@ namespace SharedMap_GPU {
         return true;
     }
 
-    inline bool validate_no_self_loops_and_duplicates(const HostGraph& g) {
+    inline bool validate_no_self_loops_and_duplicates(const HM_HostGraph& g) {
         // Basic structure sanity (optional, rely on previous validate_host_graph)
         if ((int)g.neighborhood.extent(0) != g.n + 1 ||
             (int)g.edges_v.extent(0) != g.m) {
@@ -308,7 +308,7 @@ namespace SharedMap_GPU {
     }
 
 
-    inline void write_metis(const HostGraph& g, const std::string& filename) {
+    inline void write_metis(const HM_HostGraph& g, const std::string& filename) {
         // sanity check
         assert(g.n >= 0 && g.m >= 0);
         assert((int)g.neighborhood.extent(0) == g.n + 1);
@@ -337,4 +337,4 @@ namespace SharedMap_GPU {
     }
 }
 
-#endif //SHAREDMAP_GPU_HOST_GRAPH_H
+#endif //GPU_HEIPROMAP_HM_HOST_GRAPH_H

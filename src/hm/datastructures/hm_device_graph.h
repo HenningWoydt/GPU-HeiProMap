@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of SharedMap_GPU.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -24,40 +24,40 @@
  * SOFTWARE.
  ******************************************************************************/
 
-#ifndef SHAREDMAP_GPU_DEVICE_GRAPH_H
-#define SHAREDMAP_GPU_DEVICE_GRAPH_H
+#ifndef GPU_HEIPROMAP_HM_DEVICE_GRAPH_H
+#define GPU_HEIPROMAP_HM_DEVICE_GRAPH_H
 
 #include <jet.h>
 
-#include "host_graph.h"
+#include "hm_host_graph.h"
 
-namespace SharedMap_GPU {
-    class DeviceGraph {
+namespace GPU_HeiProMap {
+    class HM_DeviceGraph {
     public:
         int n;
         int m;
         int graph_weight;
 
-        DeviceWeights vertex_weights;
-        DeviceRowMap neighborhood;
-        DeviceEntries edges_v;
-        DeviceValues edges_w;
+        JetDeviceWeights vertex_weights;
+        JetDeviceRowMap neighborhood;
+        JetDeviceEntries edges_v;
+        JetDeviceValues edges_w;
 
-        DeviceGraph() {
+        HM_DeviceGraph() {
             n            = 0;
             m            = 0;
             graph_weight = 0;
         };
 
-        explicit DeviceGraph(const HostGraph& host_g) {
+        explicit HM_DeviceGraph(const HM_HostGraph& host_g) {
             n            = host_g.n;
             m            = host_g.m;
             graph_weight = host_g.graph_weight;
 
-            vertex_weights = DeviceWeights("vertex_weights", host_g.vertex_weights.extent(0));
-            neighborhood   = DeviceRowMap("neighborhood", host_g.neighborhood.extent(0));
-            edges_v        = DeviceEntries("edges_v", host_g.edges_v.extent(0));
-            edges_w        = DeviceValues("edges_w", host_g.edges_w.extent(0));
+            vertex_weights = JetDeviceWeights("vertex_weights", host_g.vertex_weights.extent(0));
+            neighborhood   = JetDeviceRowMap("neighborhood", host_g.neighborhood.extent(0));
+            edges_v        = JetDeviceEntries("edges_v", host_g.edges_v.extent(0));
+            edges_w        = JetDeviceValues("edges_w", host_g.edges_w.extent(0));
 
             Kokkos::deep_copy(vertex_weights, host_g.vertex_weights);
             Kokkos::deep_copy(neighborhood, host_g.neighborhood);
@@ -66,15 +66,15 @@ namespace SharedMap_GPU {
             Kokkos::fence();
         }
 
-        DeviceGraph(const int t_n, const int t_m, const int t_weight) {
+        HM_DeviceGraph(const int t_n, const int t_m, const int t_weight) {
             n            = t_n;
             m            = t_m;
             graph_weight = t_weight;
 
-            vertex_weights = DeviceWeights("vertex_weights", n);
-            neighborhood   = DeviceRowMap("neighborhood", n + 1);
-            edges_v        = DeviceEntries("edges_v", m);
-            edges_w        = DeviceValues("edges_w", m);
+            vertex_weights = JetDeviceWeights("vertex_weights", n);
+            neighborhood   = JetDeviceRowMap("neighborhood", n + 1);
+            edges_v        = JetDeviceEntries("edges_v", m);
+            edges_w        = JetDeviceValues("edges_w", m);
         }
 
         jet_partitioner::matrix_t get_mtx() const {
@@ -95,17 +95,17 @@ namespace SharedMap_GPU {
         int neighbor(const int u, const size_t i) const { return edges_v(neighborhood(u) + i); }
     };
 
-    inline HostGraph convert(DeviceGraph& device_g) {
-        HostGraph host_g;
+    inline HM_HostGraph convert(HM_DeviceGraph& device_g) {
+        HM_HostGraph host_g;
         host_g.n            = device_g.n;
         host_g.m            = device_g.m;
         host_g.graph_weight = device_g.graph_weight;
 
         // Allocate host views with matching sizes
-        host_g.vertex_weights = HostWeights("host_vertex_weights", host_g.n);
-        host_g.neighborhood   = HostRowMap("host_neighborhood", host_g.n + 1);
-        host_g.edges_v        = HostEntries("host_edges_v", host_g.m);
-        host_g.edges_w        = HostValues("host_edges_w", host_g.m);
+        host_g.vertex_weights = JetHostWeights("host_vertex_weights", host_g.n);
+        host_g.neighborhood   = JetHostRowMap("host_neighborhood", host_g.n + 1);
+        host_g.edges_v        = JetHostEntries("host_edges_v", host_g.m);
+        host_g.edges_w        = JetHostValues("host_edges_w", host_g.m);
 
         // Deep copy from device to host
         Kokkos::deep_copy(host_g.vertex_weights, device_g.vertex_weights);
@@ -117,16 +117,16 @@ namespace SharedMap_GPU {
         return host_g;
     }
 
-    inline jet_partitioner::serial_matrix_t get_serial_mtx(const DeviceGraph& device_g) {
+    inline jet_partitioner::serial_matrix_t get_serial_mtx(const HM_DeviceGraph& device_g) {
         // Mirror the CRS components to host
         auto h_row_map = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), device_g.neighborhood);
         auto h_entries = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), device_g.edges_v);
         auto h_values  = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), device_g.edges_w);
 
         // Now create Serial-space mirrors
-        DeviceRowMap::HostMirror serial_row_map("serial_row_map", h_row_map.extent(0));
-        DeviceEntries::HostMirror serial_entries("serial_entries", h_entries.extent(0));
-        DeviceValues::HostMirror serial_values("serial_values", h_values.extent(0));
+        JetDeviceRowMap::HostMirror serial_row_map("serial_row_map", h_row_map.extent(0));
+        JetDeviceEntries::HostMirror serial_entries("serial_entries", h_entries.extent(0));
+        JetDeviceValues::HostMirror serial_values("serial_values", h_values.extent(0));
 
         Kokkos::deep_copy(serial_row_map, h_row_map);
         Kokkos::deep_copy(serial_entries, h_entries);
@@ -145,7 +145,7 @@ namespace SharedMap_GPU {
         return serial_mtx;
     }
 
-    inline jet_partitioner::wgt_serial_vt get_serial_vertex_weights(const DeviceGraph& device_g) {
+    inline jet_partitioner::wgt_serial_vt get_serial_vertex_weights(const HM_DeviceGraph& device_g) {
         // Mirror the vertex weights from device to host
         auto h_vertex_weights = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), device_g.vertex_weights);
 
@@ -159,4 +159,4 @@ namespace SharedMap_GPU {
     }
 }
 
-#endif //SHAREDMAP_GPU_DEVICE_GRAPH_H
+#endif //GPU_HEIPROMAP_HM_DEVICE_GRAPH_H

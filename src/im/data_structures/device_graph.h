@@ -1,7 +1,7 @@
 /*******************************************************************************
  * MIT License
  *
- * This file is part of GPU_HeiProMap.
+ * This file is part of GPU-HeiProMap.
  *
  * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
  *
@@ -30,9 +30,9 @@
 #include <Kokkos_Core.hpp>
 #include <Kokkos_Sort.hpp>
 
-#include "definitions.h"
+#include "../../utility/definitions.h"
 #include "host_graph.h"
-#include "matching.h"
+#include "../matching/matching.h"
 
 namespace GPU_HeiProMap {
     struct Graph {
