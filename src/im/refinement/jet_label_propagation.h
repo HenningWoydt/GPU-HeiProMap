@@ -223,20 +223,18 @@ namespace GPU_HeiProMap {
                      LargeVertexPartitionCSR &large_csr) {
         move(large_csr, device_g, lp.p_manager, lp.to_move, lp.preferred);
 
-        TIME("refine", "move", "move",
-             Kokkos::parallel_for("move", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
-                 if (lp.to_move(u) == 1) {
-                 weight_t u_w = device_g.weights(u);
-                 partition_t u_id = lp.p_manager.partition(u);
-                 partition_t v_id = lp.preferred(u);
+        Kokkos::parallel_for("move", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
+            if (lp.to_move(u) == 1) {
+                weight_t u_w = device_g.weights(u);
+                partition_t u_id = lp.p_manager.partition(u);
+                partition_t v_id = lp.preferred(u);
 
-                 lp.p_manager.partition(u) = v_id;
-                 Kokkos::atomic_add(&lp.p_manager.bweights(u_id), -u_w);
-                 Kokkos::atomic_add(&lp.p_manager.bweights(v_id), u_w);
-                 }
-                 });
-             Kokkos::fence();
-        );
+                lp.p_manager.partition(u) = v_id;
+                Kokkos::atomic_add(&lp.p_manager.bweights(u_id), -u_w);
+                Kokkos::atomic_add(&lp.p_manager.bweights(v_id), u_w);
+            }
+        });
+        Kokkos::fence();
     }
 
     inline void jetlp(LabelPropagationStruct &lp,
@@ -244,7 +242,6 @@ namespace GPU_HeiProMap {
                       DistanceOracle &d_oracle,
                       LargeVertexPartitionCSR &csr) {
         TIME("refine", "jetlp", "reset",
-             // Kokkos::deep_copy(lp.conn, 0);
              Kokkos::deep_copy(lp.to_move, 0);
              Kokkos::deep_copy(lp.gain2, -max_sentinel<weight_t>());
              Kokkos::deep_copy(lp.gain, -max_sentinel<weight_t>());
@@ -295,11 +292,11 @@ namespace GPU_HeiProMap {
                  bool eligible = F >= 0 || F >= -10;
                  if (eligible) {
 
-                    lp.gain(u) = best_delta;
-                    lp.preferred(u) = best_id;
+                 lp.gain(u) = best_delta;
+                 lp.preferred(u) = best_id;
 
-                    lp.in_X(u) = 1;
-                    lp.gain2(u) = 0;
+                 lp.in_X(u) = 1;
+                 lp.gain2(u) = 0;
                  }
                  });
              Kokkos::fence();
@@ -340,14 +337,16 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        move(lp, device_g, csr);
+        TIME("refine", "jetlp", "move",
+             move(lp, device_g, csr);
+        );
     }
 
     inline void jetrw(LabelPropagationStruct &lp,
                       Graph &device_g,
                       DistanceOracle &d_oracle,
                       LargeVertexPartitionCSR &csr) {
-        TIME("refine", "jetrw", "reset",
+        TIME("rebalance", "jetrw", "reset",
              Kokkos::deep_copy(lp.bucket_counts, 0);
              Kokkos::deep_copy(lp.to_move, 0);
              Kokkos::deep_copy(lp.bucket_cursor, 0);
@@ -356,7 +355,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrw", "count_open_blocks",
+        TIME("rebalance", "jetrw", "count_open_blocks",
              partition_t n_destinations = 0;
              Kokkos::parallel_reduce("count_open_blocks", lp.p_manager.k, KOKKOS_LAMBDA(const partition_t id, u32 &local) {
                  local += lp.p_manager.bweights(id) < lp.sigma ? 1u : 0u;
@@ -365,7 +364,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrw", "determine_min_delta",
+        TIME("rebalance", "jetrw", "determine_min_delta",
              Kokkos::parallel_for("determine_min_delta", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
                  partition_t old_id = lp.p_manager.partition(u);
                  if (lp.p_manager.bweights(old_id) <= lp.lmax) { return; } // vertex does not need to be moved
@@ -430,7 +429,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrw", "count_buckets",
+        TIME("rebalance", "jetrw", "count_buckets",
              Kokkos::parallel_for("count_buckets", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
                  if (lp.preferred(u) == lp.k) { return; } // no move found
 
@@ -443,7 +442,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrw", "bucket_offsets",
+        TIME("rebalance", "jetrw", "bucket_offsets",
              // prefix sum for bucket offsets
              Kokkos::parallel_scan("bucket_offsets", lp.k * lp.max_slots * lp.rho,KOKKOS_LAMBDA(const u32 i, u32 &upd, const bool final_pass) {
                  u32 val = lp.bucket_counts(i);
@@ -453,7 +452,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrw", "fill_buckets",
+        TIME("rebalance", "jetrw", "fill_buckets",
              // fill the buckets
              Kokkos::deep_copy(lp.bucket_cursor, lp.bucket_offsets);
              Kokkos::parallel_for("fill_buckets", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
@@ -469,7 +468,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrw", "pick_prefix",
+        TIME("rebalance", "jetrw", "pick_prefix",
              Kokkos::parallel_for("pick_prefix", lp.k,KOKKOS_LAMBDA(const partition_t id) {
                  if (lp.p_manager.bweights(id) <= lp.lmax) { return; }
 
@@ -501,7 +500,9 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        move(lp, device_g, csr);
+        TIME("rebalance", "jetrw", "move",
+             move(lp, device_g, csr);
+        );
     }
 
     inline void jetrs(LabelPropagationStruct &lp,
@@ -509,7 +510,7 @@ namespace GPU_HeiProMap {
                       DistanceOracle &d_oracle,
                       u32 seed,
                       LargeVertexPartitionCSR &csr) {
-        TIME("refine", "jetrs", "reset",
+        TIME("rebalance", "jetrs", "reset",
              Kokkos::deep_copy(lp.bucket_counts, 0);
              Kokkos::deep_copy(lp.to_move, 0);
              Kokkos::deep_copy(lp.gain, -max_sentinel<weight_t>());
@@ -517,7 +518,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrs", "determine_min_delta",
+        TIME("rebalance", "jetrs", "determine_min_delta",
              Kokkos::parallel_for("determine_min_delta", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
                  partition_t u_id = lp.p_manager.partition(u);
 
@@ -559,7 +560,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrs", "count_buckets",
+        TIME("rebalance", "jetrs", "count_buckets",
              // 2) For each vertex u in overloaded sources: pick best destination d with cap>0
              Kokkos::parallel_for("count_buckets", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
                  partition_t u_id = lp.p_manager.partition(u);
@@ -604,7 +605,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrs", "bucket_offsets",
+        TIME("rebalance", "jetrs", "bucket_offsets",
              // prefix sum
              Kokkos::parallel_scan("bucket_offsets", lp.k * lp.max_slots * lp.rho,
                  KOKKOS_LAMBDA(const u32 i, u32 &upd, const bool final_pass) {
@@ -615,7 +616,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrs", "fill_buckets",
+        TIME("rebalance", "jetrs", "fill_buckets",
              // fill
              Kokkos::deep_copy(lp.bucket_cursor, lp.bucket_offsets);
              Kokkos::fence();
@@ -633,7 +634,7 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        TIME("refine", "jetrs", "pick_prefix",
+        TIME("rebalance", "jetrs", "pick_prefix",
              // 4) Per-destination prefix selection: honor cap[d]
              Kokkos::parallel_for("pick_prefix", lp.k, KOKKOS_LAMBDA(const partition_t d) {
                  weight_t w = lp.p_manager.bweights(d);
@@ -669,7 +670,9 @@ namespace GPU_HeiProMap {
              Kokkos::fence();
         );
 
-        move(lp, device_g, csr);
+        TIME("rebalance", "jetrs", "move",
+             move(lp, device_g, csr);
+        );
     }
 
     inline void refine(LabelPropagationStruct &lp,

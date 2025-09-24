@@ -167,13 +167,11 @@ namespace GPU_HeiProMap {
             oss.precision(6);
             oss << "{";
 
-            // total
+            // overall total (only total_ms)
             oss << "\"total\":{"
-                    << "\"calls\":" << total_.calls << ","
-                    << "\"total_ms\":" << total_.total_ms << ","
-                    << "\"avg_ms\":" << total_.avg() << "},";
+                    "\"total_ms\":" << total_.total_ms << "},";
 
-            // groups (sorted)
+            // groups (sorted by total time desc)
             oss << "\"groups\":{";
             bool first_g = true;
             std::vector<std::pair<std::string, KTGroup const *> > gs;
@@ -185,13 +183,11 @@ namespace GPU_HeiProMap {
                 if (!first_g) oss << ",";
                 first_g = false;
                 const auto &g = *gptr;
-                oss << "\"" << esc(gname) << "\":{";
-                oss << "\"total\":{"
-                        << "\"calls\":" << g.agg.calls << ","
-                        << "\"total_ms\":" << g.agg.total_ms << ","
-                        << "\"avg_ms\":" << g.agg.avg() << "},";
 
-                // functions (sorted)
+                oss << "\"" << esc(gname) << "\":{";
+                oss << "\"total_ms\":" << g.agg.total_ms << ",";
+
+                // functions (sorted by total time desc)
                 oss << "\"functions\":{";
                 bool first_f = true;
                 std::vector<std::pair<std::string, KTKernels const *> > fs;
@@ -203,13 +199,11 @@ namespace GPU_HeiProMap {
                     if (!first_f) oss << ",";
                     first_f = false;
                     const auto &f = *fptr;
-                    oss << "\"" << esc(fname) << "\":{";
-                    oss << "\"total\":{"
-                            << "\"calls\":" << f.agg.calls << ","
-                            << "\"total_ms\":" << f.agg.total_ms << ","
-                            << "\"avg_ms\":" << f.agg.avg() << "},";
 
-                    // kernels (sorted)
+                    oss << "\"" << esc(fname) << "\":{";
+                    oss << "\"total_ms\":" << f.agg.total_ms << ",";
+
+                    // kernels (sorted by total time desc) — include calls & avg_ms here
                     oss << "\"kernels\":{";
                     bool first_k = true;
                     std::vector<std::pair<std::string, KTStat const *> > ks;
@@ -221,9 +215,10 @@ namespace GPU_HeiProMap {
                         if (!first_k) oss << ",";
                         first_k = false;
                         oss << "\"" << esc(kname) << "\":{"
-                                << "\"calls\":" << kstat->calls << ","
-                                << "\"total_ms\":" << kstat->total_ms << ","
-                                << "\"avg_ms\":" << kstat->avg() << "}";
+                                "\"calls\":" << kstat->calls << ","
+                                "\"total_ms\":" << kstat->total_ms << ","
+                                "\"avg_ms\":" << kstat->avg()
+                                << "}";
                     }
                     oss << "}"; // kernels
                     oss << "}"; // function

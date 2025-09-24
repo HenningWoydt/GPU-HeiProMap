@@ -66,7 +66,7 @@ namespace GPU_HeiProMap {
         }
 
         explicit HM_HostGraph(const std::string& file_path) {
-            if (!GPU_HeiProMap::file_exists(file_path)) {
+            if (!file_exists(file_path)) {
                 std::cerr << "File " << file_path << " does not exist!" << std::endl;
                 exit(EXIT_FAILURE);
             }
@@ -85,12 +85,8 @@ namespace GPU_HeiProMap {
             while (std::getline(file, line)) {
                 if (line[0] == '%') { continue; }
 
-                // remove leading and trailing whitespaces, replace double whitespaces
-                line.erase(0, line.find_first_not_of(' ')).erase(line.find_last_not_of(' ') + 1);
-                line = std::regex_replace(line, std::regex("\\s{2,}"), " ");
-
                 // read in header
-                std::vector<std::string> header = GPU_HeiProMap::split(line, ' ');
+                std::vector<std::string> header = split_ws(line);
                 n                               = std::stoi(header[0]);
                 m                               = std::stoi(header[1]) * 2;
 
@@ -121,7 +117,7 @@ namespace GPU_HeiProMap {
             while (std::getline(file, line)) {
                 if (line[0] == '%') { continue; }
                 // convert the lines into ints
-                GPU_HeiProMap::str_to_ints(line, ints);
+                str_to_ints(line, ints);
 
                 size_t i = 0;
 

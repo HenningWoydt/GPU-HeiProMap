@@ -31,6 +31,7 @@
 #include <Kokkos_Sort.hpp>
 
 #include "../../utility/definitions.h"
+#include "../../utility/profiler.h"
 #include "host_graph.h"
 #include "../matching/matching.h"
 
@@ -61,50 +62,57 @@ namespace GPU_HeiProMap {
     }
 
     inline Graph initialize_device_g(const HostGraph &host_g) {
-        Graph device_g;
+        TIME("io", "initialize_device_g", "copy",
+             Graph device_g;
 
-        device_g.n = host_g.n;
-        device_g.m = host_g.m;
-        device_g.g_weight = host_g.g_weight;
+             device_g.n = host_g.n;
+             device_g.m = host_g.m;
+             device_g.g_weight = host_g.g_weight;
 
-        device_g.weights = DeviceWeight("vertex_weights", host_g.n);
-        device_g.neighborhood = DeviceU32("neighborhood", host_g.n + 1);
-        device_g.edges_u = DeviceVertex("edges_u", host_g.m);
-        device_g.edges_v = DeviceVertex("edges_v", host_g.m);
-        device_g.edges_w = DeviceWeight("edges_w", host_g.m);
+             device_g.weights = DeviceWeight("vertex_weights", host_g.n);
+             device_g.neighborhood = DeviceU32("neighborhood", host_g.n + 1);
+             device_g.edges_u = DeviceVertex("edges_u", host_g.m);
+             device_g.edges_v = DeviceVertex("edges_v", host_g.m);
+             device_g.edges_w = DeviceWeight("edges_w", host_g.m);
 
-        Kokkos::deep_copy(device_g.weights, host_g.weights);
-        Kokkos::deep_copy(device_g.neighborhood, host_g.neighborhood);
-        Kokkos::deep_copy(device_g.edges_v, host_g.edges_v);
-        Kokkos::deep_copy(device_g.edges_w, host_g.edges_w);
-        Kokkos::fence();
+             Kokkos::deep_copy(device_g.weights, host_g.weights);
+             Kokkos::deep_copy(device_g.neighborhood, host_g.neighborhood);
+             Kokkos::deep_copy(device_g.edges_v, host_g.edges_v);
+             Kokkos::deep_copy(device_g.edges_w, host_g.edges_w);
+             Kokkos::fence();
+        );
 
-        Kokkos::parallel_for("fill_edges_u", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
-            u32 begin = device_g.neighborhood(u);
-            u32 end = device_g.neighborhood(u + 1);
-            for (u32 i = begin; i < end; ++i) {
-                device_g.edges_u(i) = u;
-            }
-        });
-        Kokkos::fence();
+        TIME("io", "initialize_device_g", "fill_edges_u",
+             Kokkos::parallel_for("fill_edges_u", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
+                 u32 begin = device_g.neighborhood(u);
+                 u32 end = device_g.neighborhood(u + 1);
+                 for (u32 i = begin; i < end; ++i) {
+                 device_g.edges_u(i) = u;
+                 }
+                 });
+             Kokkos::fence();
+        );
 
         return device_g;
     }
 
     inline Graph initialize_device_g(const Graph &device_g,
                                      const Matching &matching) {
-        Graph coarse_device_g;
+        TIME("coarsening", "initialize_device_g", "init_vars",
+             Graph coarse_device_g;
 
-        // n, m, weights, offsets
-        coarse_device_g.n = device_g.n - (n_matched_v(matching) / 2);
-        coarse_device_g.m = device_g.m; // upper bound, will recompute exactly later
-        coarse_device_g.g_weight = device_g.g_weight;
+             // n, m, weights, offsets
+             coarse_device_g.n = device_g.n - (n_matched_v(matching) / 2);
+             coarse_device_g.m = device_g.m; // upper bound, will recompute exactly later
+             coarse_device_g.g_weight = device_g.g_weight;
 
-        coarse_device_g.weights = DeviceWeight("vertex_weights", coarse_device_g.n);
-        coarse_device_g.neighborhood = DeviceU32("neighborhood", coarse_device_g.n + 1);
-        DeviceVertex real_neighborhood_sizes = DeviceVertex("real_neighborhood_sizes", coarse_device_g.n);
-        Kokkos::deep_copy(real_neighborhood_sizes, 0);
+             coarse_device_g.weights = DeviceWeight("vertex_weights", coarse_device_g.n);
+             coarse_device_g.neighborhood = DeviceU32("neighborhood", coarse_device_g.n + 1);
+             DeviceVertex real_neighborhood_sizes = DeviceVertex("real_neighborhood_sizes", coarse_device_g.n);
+             Kokkos::deep_copy(real_neighborhood_sizes, 0);
+        );
 
+        TIME("coarsening", "initialize_device_g", "max_neighborhood_sizes",
         // 1) Per-coarse vertex: max table size and vertex weights
         DeviceU32 max_neighborhood_sizes = DeviceU32("max_neighborhood_sizes", coarse_device_g.n);
         Kokkos::parallel_for("max_neighborhood_size", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
@@ -122,18 +130,24 @@ namespace GPU_HeiProMap {
             coarse_device_g.weights(new_u) = w_u + w_v;
         });
         Kokkos::fence();
+        );
 
+        TIME("coarsening", "initialize_device_g", "hash_offsets",
         // 2) Build per-vertex hash ranges (offsets) and get total slots H
         //    hash_offsets has length n+1 already
         DeviceU32 hash_offsets = DeviceU32("hash_offsets", coarse_device_g.n + 1);
         Kokkos::deep_copy(hash_offsets, 0);
+        );
 
+        TIME("coarsening", "initialize_device_g", "prefix_sum_offsets",
         Kokkos::parallel_scan("prefix_sum_offsets", coarse_device_g.n + 1, KOKKOS_LAMBDA(const u32 i, u32 &running, const bool final) {
             u32 cnt = i < coarse_device_g.n ? max_neighborhood_sizes(i) : 0;
             if (final) hash_offsets(i) = running;
             running += cnt;
         });
+        );
 
+        TIME("coarsening", "initialize_device_g", "init_hash_keys_values",
         // 3) Allocate hash tables to exact size H (NOT m)
         DeviceVertex hash_keys("hash_keys", device_g.m);
         DeviceWeight hash_vals("hash_vals", device_g.m);
@@ -142,7 +156,9 @@ namespace GPU_HeiProMap {
         Kokkos::deep_copy(hash_keys, coarse_device_g.n);
         Kokkos::deep_copy(hash_vals, 0);
         Kokkos::fence();
+        );
 
+        TIME("coarsening", "initialize_device_g", "hash_edges",
         // 5) Insert edges into per-vertex hash tables (linear probing within each vertex range)
         Kokkos::parallel_for("hash_edges", device_g.m, KOKKOS_LAMBDA(const u32 i) {
             vertex_t u = device_g.edges_u(i);
@@ -179,20 +195,28 @@ namespace GPU_HeiProMap {
             }
         });
         Kokkos::fence();
+        );
 
+        TIME("coarsening", "initialize_device_g", "scan_real_deg",
         // 6) Build CSR offsets for coarse graph
         Kokkos::parallel_scan("scan_real_deg", coarse_device_g.n + 1, KOKKOS_LAMBDA(const u32 i, u32 &running, const bool final) {
             const u32 cnt = i < coarse_device_g.n ? real_neighborhood_sizes(i) : 0;
             if (final) coarse_device_g.neighborhood(i) = running;
             running += cnt;
         });
-        Kokkos::deep_copy(coarse_device_g.m, Kokkos::subview(coarse_device_g.neighborhood, coarse_device_g.n));
         Kokkos::fence();
 
+        Kokkos::deep_copy(coarse_device_g.m, Kokkos::subview(coarse_device_g.neighborhood, coarse_device_g.n));
+        Kokkos::fence();
+        );
+
+        TIME("coarsening", "initialize_device_g", "allocate_edge_memory",
         coarse_device_g.edges_u = DeviceVertex("edges_u", coarse_device_g.m);
         coarse_device_g.edges_v = DeviceVertex("edges_v", coarse_device_g.m);
         coarse_device_g.edges_w = DeviceWeight("edges_w", coarse_device_g.m);
+        );
 
+        TIME("coarsening", "initialize_device_g", "materialize_edges",
         // 7) Fill CSR without atomics: iterate each coarse vertex’s hash range and stream its occupied slots into its CSR segment
         Kokkos::parallel_for("materialize_edges", coarse_device_g.n, KOKKOS_LAMBDA(const vertex_t u_new) {
             u32 out = coarse_device_g.neighborhood(u_new);
@@ -212,7 +236,9 @@ namespace GPU_HeiProMap {
             }
         });
         Kokkos::fence();
+        );
 
+        TIME("coarsening", "initialize_device_g", "fill_edges_u",
         Kokkos::parallel_for("fill_edges_u", coarse_device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
             u32 begin = coarse_device_g.neighborhood(u);
             u32 end = coarse_device_g.neighborhood(u + 1);
@@ -221,6 +247,7 @@ namespace GPU_HeiProMap {
             }
         });
         Kokkos::fence();
+        );
 
         return coarse_device_g;
     }

@@ -55,27 +55,19 @@ namespace GPU_HeiProMap {
 
         DistanceOracle d_oracle;
 
-        f64 time_io = 0;
-        f64 time_init = 0;
-        f64 time_matching = 0;
-        f64 time_coarsening = 0;
-        f64 time_initial_partition = 0;
-        f64 time_uncoarsening = 0;
-        f64 time_refinement = 0;
-
 
         explicit IM_Solver(Configuration t_config) : config(std::move(t_config)) {
-            PROFILE(time_io, io());
-            PROFILE(time_init, initialize());
+            io();
+            initialize();
         }
 
-        std::vector<partition_t> solve() {
+        HostPartition solve() {
             partition_t c = 128;
 
             // first coarsening
             u32 level = 0;
             while (device_graphs.back().n > c * config.k) {
-                PROFILE(time_matching, matching());
+                matching();
 
                 u32 n_matched = n_matched_v(matchings.back());
                 if ((f64) n_matched < HeavyEdgeMatcher().threshold * (f64) device_graphs.back().n) {
@@ -83,28 +75,27 @@ namespace GPU_HeiProMap {
                     break;
                 }
 
-                PROFILE(time_coarsening, coarsening());
+                coarsening();
 
                 level += 1;
             }
 
             // initial partitioning
             u32 max_level = level;
-            PROFILE(time_initial_partition, initial_partitioning());
-            std::cout << "Initial   " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
+            initial_partitioning();
 
             // v cycles
             u32 max_cycle = 0;
             for (u32 cycle = 0; cycle < max_cycle; ++cycle) {
                 while (!matchings.empty()) {
                     level -= 1;
-                    PROFILE(time_uncoarsening, uncoarsening());
-                    PROFILE(time_refinement, refinement(max_level, level));
+                    uncoarsening();
+                    refinement(max_level, level);
                 }
 
                 while (device_graphs.back().n > 8 * config.k) {
-                    PROFILE(time_matching, matching());
-                    PROFILE(time_coarsening, coarsening());
+                    matching();
+                    coarsening();
                     level += 1;
                 }
                 std::cout << "V-Cycle " << cycle << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
@@ -113,32 +104,45 @@ namespace GPU_HeiProMap {
             // final refinement
             while (!matchings.empty()) {
                 level -= 1;
-                PROFILE(time_uncoarsening, uncoarsening());
-                PROFILE(time_refinement, refinement(max_level, level));
+                uncoarsening();
+                refinement(max_level, level);
 
                 // std::cout << "Level  " << level << " " << device_graphs.back().n << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
             }
 
-            std::cout << "Final     " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
+            TIME("io", "io", "write_partition",
+                 HostPartition host_partition = HostPartition("host_partition", device_graphs.back().n);
+                 Kokkos::deep_copy(host_partition, p_manager.partition);
 
-            HostPartition host_partition = HostPartition("host_partition", device_graphs.back().n);
-            Kokkos::deep_copy(host_partition, p_manager.partition);
+                 write_partition(host_partition, device_graphs.back().n, config.mapping_out);
+            );
 
-            std::vector<partition_t> partition(device_graphs.back().n);
-            for (u32 i = 0; i < device_graphs.back().n; ++i) {
-                partition[i] = host_partition[i];
+            std::string config_JSON = config.to_JSON();
+            std::string profile_JSON = Profiler::instance().to_JSON();
+
+            // Combine manually into a single JSON string
+            std::string combined_JSON = "{\n";
+            combined_JSON += "  \"config\": " + config_JSON + ",\n";
+            combined_JSON += "  \"profile\": " + profile_JSON + "\n";
+            combined_JSON += "}";
+
+            // Save to file
+            std::ofstream outFile(config.statistics_out);
+            if (outFile.is_open()) {
+                outFile << combined_JSON;
+                outFile.close();
+            } else {
+                std::cerr << "Error: Could not open " << config.statistics_out << " to write statistics!" << std::endl;
             }
 
-            write_partition(partition, config.mapping_out);
-            print_times();
-            Profiler::instance().print();
-
-            return partition;
+            return host_partition;
         }
 
     private:
         void io() {
-            host_g = HostGraph(config.graph_in);
+            TIME("io", "HostGraph", "load",
+                 host_g = HostGraph(config.graph_in);
+            );
         }
 
         void initialize() {
@@ -193,25 +197,6 @@ namespace GPU_HeiProMap {
 
             refine(lp_struct, device_graphs.back(), p_manager, d_oracle, level);
             assert_state_after_partition(device_graphs.back(), p_manager, config.k, d_oracle, config.hierarchy, config.distance);
-        }
-
-        void print_times() const {
-            f64 total_time = time_io + time_init + time_matching + time_coarsening + time_initial_partition + time_uncoarsening + time_refinement;
-
-            std::cout << std::fixed << std::setprecision(3);
-            std::cout << "================ Timing Breakdown ================\n";
-            std::cout << std::setw(25) << std::left << "Stage" << std::setw(12) << "Time (s)" << "Percent\n";
-            std::cout << "--------------------------------------------------\n";
-            std::cout << std::setw(25) << "I/O" << std::setw(12) << time_io << (time_io / total_time) * 100 << "%\n";
-            std::cout << std::setw(25) << "Initialization" << std::setw(12) << time_init << (time_init / total_time) * 100 << "%\n";
-            std::cout << std::setw(25) << "Matching" << std::setw(12) << time_matching << (time_matching / total_time) * 100 << "%\n";
-            std::cout << std::setw(25) << "Coarsening" << std::setw(12) << time_coarsening << (time_coarsening / total_time) * 100 << "%\n";
-            std::cout << std::setw(25) << "Initial Partition" << std::setw(12) << time_initial_partition << (time_initial_partition / total_time) * 100 << "%\n";
-            std::cout << std::setw(25) << "Uncoarsening" << std::setw(12) << time_uncoarsening << (time_uncoarsening / total_time) * 100 << "%\n";
-            std::cout << std::setw(25) << "Refinement" << std::setw(12) << time_refinement << (time_refinement / total_time) * 100 << "%\n";
-            std::cout << "--------------------------------------------------\n";
-            std::cout << std::setw(25) << "Total" << std::setw(12) << total_time << "100.0%\n";
-            std::cout << "==================================================\n";
         }
     };
 }

@@ -39,12 +39,12 @@ int main(int argc, char *argv[]) {
     Kokkos::ScopeGuard guard(argc, argv);
 
     if (argc == 1) {
-        // Configuration config(argc, argv);
-        // config.print_help_message();
-        // exit(EXIT_FAILURE);
+        Configuration config(argc, argv);
+        config.print_help_message();
+        exit(EXIT_FAILURE);
         {
             std::vector<std::pair<std::string, std::string> > input = {
-                {"--graph", "../../graph_collection/mapping/rgg24.graph"}, // 10 243 578
+                {"--graph", "../../graph_collection/mapping/rgg24.graph"}, // SharedMap comm cost 10 243 578
                 {"--mapping", "../data/out/partition/rgg24.txt"},
                 {"--statistics", "../data/out/statistics/rgg24.JSON"},
                 {"--hierarchy", "4:8:6"},

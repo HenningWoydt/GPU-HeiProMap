@@ -68,128 +68,79 @@ namespace GPU_HeiProMap {
                 exit(EXIT_FAILURE);
             }
 
-            std::vector<char> buffer = load_file_to_buffer(file_path);
-            size_t size = buffer.size();
-            size_t i = 0;
+            std::ifstream file(file_path);
+            if (!file.is_open()) {
+                std::cerr << "Could not open file " << file_path << "!" << std::endl;
+                exit(EXIT_FAILURE);
+            }
 
+            std::string line(64, ' ');
             bool has_v_weights = false;
             bool has_e_weights = false;
 
-            // read header
-            n = 0;
-            m = 0;
-            g_weight = 0;
-            while (i < size) {
-                if (buffer[i] == '%') {
-                    // skip this line
-                    while (buffer[i] != '\n') { i += 1; }
-                    i += 1;
-                    continue;
+            // read in header
+            while (std::getline(file, line)) {
+                if (line[0] == '%') { continue; }
+
+                // read in header
+                std::vector<std::string> header = split_ws(line);
+                n = (vertex_t) std::stoul(header[0]);
+                m = (vertex_t) std::stoul(header[1]) * 2;
+
+                // allocate space
+                g_weight = 0;
+                weights = HostWeight("vertex_weights", n);
+                neighborhood = HostVertex("neighborhood", n + 1);
+                neighborhood(0) = 0;
+                edges_v = HostVertex("edges_v", m);
+                edges_w = HostWeight("edges_w", m);
+
+                // read in header
+                std::string fmt = "000";
+                if (header.size() == 3 && header[2].size() == 3) {
+                    fmt = header[2];
                 }
-
-                // header line
-                while (buffer[i] == ' ') { i += 1; } // skip leading whitespaces
-
-                // read n
-                n = 0;
-                while (buffer[i] != ' ') {
-                    n = n * 10 + (vertex_t) (buffer[i] - '0');
-                    i += 1;
-                }
-                while (buffer[i] == ' ') { i += 1; } // skip whitespaces
-
-                // read m
-                m = 0;
-                while (buffer[i] != ' ' && buffer[i] != '\n') {
-                    m = m * 10 + (vertex_t) (buffer[i] - '0');
-                    i += 1;
-                }
-                m *= 2;
-                while (buffer[i] == ' ') { i += 1; } // skip whitespaces
-
-                // read fmt
-                size_t fmt = 0;
-                while (buffer[i] != ' ' && buffer[i] != '\n') {
-                    fmt = fmt * 10 + (vertex_t) (buffer[i] - '0');
-                    i += 1;
-                }
-
-                has_e_weights = fmt % 10 == 1;
-                has_v_weights = (fmt / 10) % 10 == 1;
-
-                while (buffer[i] == ' ') { i += 1; }
-                i += 1;
+                has_v_weights = fmt[1] == '1';
+                has_e_weights = fmt[2] == '1';
 
                 break;
             }
 
-            // allocate space
-            g_weight = 0;
-            weights = HostWeight("vertex_weights", n);
-            neighborhood = HostVertex("neighborhood", n + 1);
-            neighborhood(0) = 0;
-            edges_v = HostVertex("edges_v", m);
-            edges_w = HostWeight("edges_w", m);
-
-            // read body
+            // read in edges
             vertex_t u = 0;
-            size_t idx = 0;
-            while (i < size) {
-                if (buffer[i] == '%') {
-                    // skip this line
-                    while (buffer[i] != '\n') { i += 1; }
-                    i += 1;
-                    continue;
+            std::vector<vertex_t> ints;
+            vertex_t curr_m = 0;
+
+            while (std::getline(file, line)) {
+                if (line[0] == '%') { continue; }
+                // convert the lines into ints
+                str_to_ints(line, ints);
+
+                size_t i = 0;
+
+                // check if vertex weights
+                weight_t w = 1;
+                if (has_v_weights) { w = ints[i++]; }
+                weights(u) = w;
+                g_weight += w;
+
+                while (i < ints.size()) {
+                    vertex_t v = ints[i++] - 1;
+
+                    // check if edge weights
+                    w = 1;
+                    if (has_e_weights) { w = ints[i++]; }
+                    edges_v(curr_m) = v;
+                    edges_w(curr_m) = w;
+                    curr_m += 1;
                 }
+                neighborhood(u + 1) = curr_m;
 
-                while (buffer[i] == ' ') { i += 1; } // skip leading whitespaces
-
-                // read in the vertex weight
-                if (has_v_weights) {
-                    weight_t w = 0;
-                    while (buffer[i] != ' ' && buffer[i] != '\n') {
-                        w = w * 10 + (buffer[i] - '0');
-                        i += 1;
-                    }
-                    while (buffer[i] == ' ') { i += 1; } // skip whitespaces
-
-                    weights(u) = w;
-                    g_weight += w;
-                } else {
-                    weights(u) = 1;
-                    g_weight += 1;
-                }
-
-                // read in the edges
-                while (i < size && buffer[i] != '\n') {
-                    vertex_t v = 0;
-                    weight_t w = 1;
-                    while (buffer[i] != ' ' && buffer[i] != '\n') {
-                        v = v * 10 + (vertex_t) (buffer[i] - '0');
-                        i += 1;
-                    }
-                    while (buffer[i] == ' ') { i += 1; } // skip whitespaces
-                    if (has_e_weights) {
-                        w = 0;
-                        while (buffer[i] != ' ' && buffer[i] != '\n') {
-                            w = w * 10 + (buffer[i] - '0');
-                            i += 1;
-                        }
-                        while (buffer[i] == ' ') { i += 1; } // skip whitespaces
-                    }
-
-                    edges_v(idx) = v - 1;
-                    edges_w(idx) = w;
-                    idx += 1;
-                }
-                i += 1;
-
-                neighborhood(u + 1) = (u32) idx;
                 u += 1;
             }
 
-            if (idx != m) {
-                std::cerr << "Number of expected edges " << m << " not equal to number edges " << idx << " found!" << std::endl;
+            if (curr_m != m) {
+                std::cerr << "Number of expected edges " << m << " not equal to number edges " << curr_m << " found!" << std::endl;
                 exit(EXIT_FAILURE);
             }
         }

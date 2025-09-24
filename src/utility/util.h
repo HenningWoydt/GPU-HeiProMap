@@ -27,6 +27,7 @@
 #ifndef GPU_HEIPROMAP_UTIL_H
 #define GPU_HEIPROMAP_UTIL_H
 
+#include <charconv>
 #include <fstream>
 #include <iomanip>
 #include <istream>
@@ -49,6 +50,17 @@ namespace GPU_HeiProMap {
         }
 
         return splits;
+    }
+
+    inline std::vector<std::string> split_ws(const std::string &str) {
+        std::vector<std::string> result;
+        std::istringstream iss(str);
+        std::string token;
+        while (iss >> token) {
+            // skips all whitespace automatically
+            result.push_back(token);
+        }
+        return result;
     }
 
     inline bool file_exists(const std::string &path) {
@@ -129,6 +141,28 @@ namespace GPU_HeiProMap {
                 curr_number = 0;
             } else {
                 curr_number = curr_number * 10 + (int) (c - '0');
+            }
+        }
+
+        ints[idx] = curr_number;
+        idx += curr_number != 0;
+        ints.resize(idx);
+    }
+
+    inline void str_to_ints(const std::string &str,
+                            std::vector<vertex_t> &ints) {
+        ints.resize(str.size());
+
+        size_t idx = 0;
+        vertex_t curr_number = 0;
+
+        for (const char c: str) {
+            if (c == ' ') {
+                ints[idx] = curr_number;
+                idx += curr_number != 0;
+                curr_number = 0;
+            } else {
+                curr_number = curr_number * 10 + (vertex_t) (c - '0');
             }
         }
 
@@ -285,7 +319,10 @@ namespace GPU_HeiProMap {
 
     inline void write_partition(const std::vector<partition_t> &partition, const std::string &file_path) {
         std::ofstream out(file_path, std::ios::binary); // Open file in binary mode for faster writing
-        if (!out.is_open()) return; // Ensure the file is open before proceeding
+        if (!out.is_open()) {
+            std::cerr << "Error: Could not open " << file_path << " to write partition!" << std::endl;
+            return;
+        }
 
         // Write each partition element directly to the file, separating them by newlines
         for (const auto &i: partition) {
@@ -293,6 +330,107 @@ namespace GPU_HeiProMap {
         }
 
         out.close();
+    }
+
+    inline void write_partition_slow(const HostPartition &partition, vertex_t n, const std::string &file_path) {
+        std::ofstream out(file_path, std::ios::binary); // Open file in binary mode for faster writing
+        if (!out.is_open()) {
+            std::cerr << "Error: Could not open " << file_path << " to write partition!" << std::endl;
+            return;
+        }
+
+        // Write each partition element directly to the file, separating them by newlines
+        for (vertex_t u = 0; u < n; ++u) {
+            out << partition(u) << '\n'; // Write each element followed by a newline
+        }
+
+        out.close();
+    }
+
+    inline void write_partition(const HostPartition &partition,
+                                vertex_t n,
+                                const std::string &file_path) {
+        std::ofstream out(file_path, std::ios::binary);
+        if (!out) {
+            std::cerr << "Error: Could not open " << file_path << " to write partition!\n";
+            return;
+        }
+
+        // 1) Enlarge the stream's internal buffer (optional but helps).
+        std::vector<char> stream_buf(1 << 20); // 1 MB
+        out.rdbuf()->pubsetbuf(stream_buf.data(), stream_buf.size());
+
+        // 2) Our own aggregation buffer for batched writes.
+        std::string buf;
+        buf.reserve(1 << 20); // 1 MB; tune as needed
+
+        for (vertex_t u = 0; u < n; ++u) {
+            // Convert integer to text without iostream overhead.
+            char tmp[32]; // enough for signed 64-bit
+            auto val = partition(u);
+            auto res = std::to_chars(std::begin(tmp), std::end(tmp), val);
+            if (res.ec != std::errc{}) {
+                std::cerr << "Error: to_chars failed while writing.\n";
+                return;
+            }
+            const size_t len = static_cast<size_t>(res.ptr - tmp);
+
+            // Flush our buffer if adding this line would overflow capacity.
+            if (buf.size() + len + 1 > buf.capacity()) {
+                out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+                buf.clear();
+            }
+            buf.append(tmp, len);
+            buf.push_back('\n');
+        }
+
+        if (!buf.empty())
+            out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+
+        out.flush(); // optional
+    }
+
+    inline void write_partition(const std::vector<int> &partition,
+                                const std::string &file_path) {
+        vertex_t n = (vertex_t) partition.size();
+        std::ofstream out(file_path, std::ios::binary);
+        if (!out) {
+            std::cerr << "Error: Could not open " << file_path << " to write partition!\n";
+            return;
+        }
+
+        // 1) Enlarge the stream's internal buffer (optional but helps).
+        std::vector<char> stream_buf(1 << 20); // 1 MB
+        out.rdbuf()->pubsetbuf(stream_buf.data(), stream_buf.size());
+
+        // 2) Our own aggregation buffer for batched writes.
+        std::string buf;
+        buf.reserve(1 << 20); // 1 MB; tune as needed
+
+        for (vertex_t u = 0; u < n; ++u) {
+            // Convert integer to text without iostream overhead.
+            char tmp[32]; // enough for signed 64-bit
+            auto val = partition[u];
+            auto res = std::to_chars(std::begin(tmp), std::end(tmp), val);
+            if (res.ec != std::errc{}) {
+                std::cerr << "Error: to_chars failed while writing.\n";
+                return;
+            }
+            const size_t len = static_cast<size_t>(res.ptr - tmp);
+
+            // Flush our buffer if adding this line would overflow capacity.
+            if (buf.size() + len + 1 > buf.capacity()) {
+                out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+                buf.clear();
+            }
+            buf.append(tmp, len);
+            buf.push_back('\n');
+        }
+
+        if (!buf.empty())
+            out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
+
+        out.flush(); // optional
     }
 
     template<class View>

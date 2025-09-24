@@ -35,52 +35,58 @@
 #include "datastructures/hm_host_graph.h"
 #include "partitioning/partition.h"
 #include "../utility/configuration.h"
+#include "../utility/profiler.h"
 
 namespace GPU_HeiProMap {
     class HM_Solver {
-        Configuration m_configuration;
-
-        f64 io_time = 0.0;
-        f64 solve_time = 0.0;
-        f64 time_partition = 0.0;
-        f64 time_subgraphs = 0.0;
-        f64 time_final_partition = 0.0;
+        Configuration config;
 
     public:
-        explicit HM_Solver(Configuration t_config) : m_configuration(std::move(t_config)) {
+        explicit HM_Solver(Configuration t_config) : config(std::move(t_config)) {
         }
 
         std::vector<int> solve() {
-            auto sp = std::chrono::steady_clock::now();
-            HM_HostGraph g(m_configuration.graph_in);
-            auto ep = std::chrono::steady_clock::now();
-            io_time += (f64) std::chrono::duration_cast<std::chrono::nanoseconds>(ep - sp).count() / 1e9;
+            TIME("io", "HostGraph", "load",
+                 HM_HostGraph g(config.graph_in);
+            );
 
             // solve problem
-            sp = std::chrono::steady_clock::now();
             std::vector<int> partition = internal_solve(g);
-            ep = std::chrono::steady_clock::now();
-            solve_time += (f64) std::chrono::duration_cast<std::chrono::nanoseconds>(ep - sp).count() / 1e9;
 
             // write output
-            sp = std::chrono::steady_clock::now();
-            write_solution(partition);
-            ep = std::chrono::steady_clock::now();
-            io_time += (f64) std::chrono::duration_cast<std::chrono::nanoseconds>(ep - sp).count() / 1e9;
+            TIME("io", "out", "write_partition",
+            write_partition(partition, config.mapping_out);
+            );
 
-            print_statistics();
+            std::string config_JSON = config.to_JSON();
+            std::string profile_JSON = Profiler::instance().to_JSON();
+
+            // Combine manually into a single JSON string
+            std::string combined_JSON = "{\n";
+            combined_JSON += "  \"config\": " + config_JSON + ",\n";
+            combined_JSON += "  \"profile\": " + profile_JSON + "\n";
+            combined_JSON += "}";
+
+            // Save to file
+            std::ofstream outFile(config.statistics_out);
+            if (outFile.is_open()) {
+                outFile << combined_JSON;
+                outFile.close();
+            } else {
+                std::cerr << "Error: Could not open " << config.statistics_out << " to write statistics!" << std::endl;
+            }
 
             return partition;
         }
 
         std::vector<int> internal_solve(HM_HostGraph &host_g) {
             JetDevicePartition final_device_partition = JetDevicePartition("final_device_partition", host_g.n);
-            DeviceScratchMemory scratch_mem(host_g.n, max(m_configuration.hierarchy));
+            DeviceScratchMemory scratch_mem(host_g.n, max(config.hierarchy));
 
             // references for better code readability
-            const int l = (int) m_configuration.hierarchy.size();
+            const int l = (int) config.hierarchy.size();
             std::vector<int> hierarchy((u64) l);
-            for (int i = 0; i < l; ++i) { hierarchy[i] = (int) m_configuration.hierarchy[i]; }
+            for (int i = 0; i < l; ++i) { hierarchy[i] = (int) config.hierarchy[i]; }
 
             std::vector<int> index_vec; // index vector to correctly offset all resulting graphs
             index_vec = {1};
@@ -96,10 +102,10 @@ namespace GPU_HeiProMap {
                 p *= hierarchy[i];
             }
 
-            const f64 global_imbalance = m_configuration.imbalance;
+            const f64 global_imbalance = config.imbalance;
             const int global_g_weight = host_g.graph_weight;
-            const int global_k = (int) m_configuration.k;
-            const bool use_ultra = m_configuration.config == "HM-Ultra";
+            const int global_k = (int) config.k;
+            const bool use_ultra = config.config == "HM-Ultra";
 
             std::vector<HM_Item> stack;
             JetHostEntries host_o_to_n("o_to_n", host_g.n);
@@ -126,32 +132,25 @@ namespace GPU_HeiProMap {
                 const int local_k_rem = k_rem_vec[depth];
                 const f64 local_imbalance = determine_adaptive_imbalance(global_imbalance, global_g_weight, global_k, item.device_g.graph_weight, local_k_rem, depth + 1);
 
-                auto sp_partition = std::chrono::high_resolution_clock::now();
-                JetDevicePartition device_partition = jet_partition(item.device_g, local_k, local_imbalance, m_configuration.seed, use_ultra);
-                auto ep_partition = std::chrono::high_resolution_clock::now();
-                time_partition += get_seconds(sp_partition, ep_partition);
+                JetDevicePartition device_partition = jet_partition(item.device_g, local_k, local_imbalance, config.seed, use_ultra);
 
                 if (depth == 0) {
                     // insert solution
-                    auto sp_insert = std::chrono::high_resolution_clock::now();
-                    int offset = 0;
-                    for (size_t i = 0; i < item.identifier.size(); ++i) {
-                        offset += item.identifier[i] * index_vec[index_vec.size() - 1 - i];
-                    }
-                    Kokkos::parallel_for("AssignFinalPartition", Kokkos::RangePolicy<>(0, item.device_g.n), KOKKOS_LAMBDA(int u) {
-                                             int original_u = item.n_to_o(u);
-                                             final_device_partition(original_u) = offset + device_partition(u);
-                                         }
+                    TIME("io", "solver", "AssignFinalPartition",
+                         int offset = 0;
+                         for (size_t i = 0; i < item.identifier.size(); ++i) {
+                         offset += item.identifier[i] * index_vec[index_vec.size() - 1 - i];
+                         }
+                         Kokkos::parallel_for("AssignFinalPartition", Kokkos::RangePolicy<>(0, item.device_g.n), KOKKOS_LAMBDA(int u) {
+                             int original_u = item.n_to_o(u);
+                             final_device_partition(original_u) = offset + device_partition(u);
+                             }
+                         );
+                         Kokkos::fence();
                     );
-                    Kokkos::fence();
-                    auto ep_insert = std::chrono::high_resolution_clock::now();
-                    time_final_partition += get_seconds(sp_insert, ep_insert);
                 } else {
                     // create the subgraphs and place them in the next stack
-                    auto sp_subgraphs = std::chrono::high_resolution_clock::now();
                     create_subgraphs(item.device_g, item.n_to_o, local_k, device_partition, item.identifier, host_g.n, stack, scratch_mem);
-                    auto ep_subgraphs = std::chrono::high_resolution_clock::now();
-                    time_subgraphs += get_seconds(sp_subgraphs, ep_subgraphs);
                 }
             }
 
@@ -164,33 +163,6 @@ namespace GPU_HeiProMap {
             }
 
             return partition;
-        }
-
-        void write_solution(std::vector<int> &partition) const {
-            std::stringstream ss;
-
-            for (int i: partition) {
-                ss << i << "\n";
-            }
-            std::ofstream out(m_configuration.mapping_out);
-            out << ss.rdbuf();
-            out.close();
-        }
-
-        void print_statistics() {
-            std::string s = "{\n";
-
-            s += to_JSON_MACRO(io_time);
-            s += to_JSON_MACRO(solve_time);
-            s += to_JSON_MACRO(time_partition);
-            s += to_JSON_MACRO(time_subgraphs);
-            s += to_JSON_MACRO(time_final_partition);
-            s += "\"algorithm-configuration\" : " + m_configuration.to_JSON(2) + ",\n";
-
-            s.pop_back();
-            s.pop_back();
-            s += "\n}";
-            std::cout << s << std::endl;
         }
     };
 }

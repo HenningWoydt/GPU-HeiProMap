@@ -37,15 +37,6 @@ namespace GPU_HeiProMap {
 #else
 #define ASSERT(condition) if(!(condition)) {((void)0); } ((void)0)
 #endif
-
-
-#define PROFILE(var, statement)                          \
-{                                                      \
-auto __start = std::chrono::high_resolution_clock::now(); \
-statement;                                         \
-auto __end = std::chrono::high_resolution_clock::now();   \
-var += get_seconds(__start, __end); \
-}
 }
 
 #endif //GPU_HEIPROMAP_MACROS_H
