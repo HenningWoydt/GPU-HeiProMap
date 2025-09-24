@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
 
             if (config.config == "IM") {
                 IM_Solver(config).solve();
-            } else if (config.config == "HM" || config.config == "HM-Ultra") {
+            } else if (config.config == "HM" || config.config == "HM-ultra") {
                 HM_Solver(config).solve();
             } else {
                 std::cerr << "Error: Invalid config" << std::endl;
@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
 
         if (config.config == "IM") {
             IM_Solver(config).solve();
-        } else if (config.config == "HM" || config.config == "HM-Ultra") {
+        } else if (config.config == "HM" || config.config == "HM-ultra") {
             HM_Solver(config).solve();
         } else {
             std::cerr << "Error: Invalid config" << std::endl;

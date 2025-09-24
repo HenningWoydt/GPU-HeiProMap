@@ -109,7 +109,7 @@ namespace GPU_HeiProMap {
             const f64 global_imbalance = config.imbalance;
             const int global_g_weight = host_g.graph_weight;
             const int global_k = (int) config.k;
-            const bool use_ultra = config.config == "HM-Ultra";
+            const bool use_ultra = config.config == "HM-ultra";
 
             std::vector<HM_Item> stack;
             JetHostEntries host_o_to_n("o_to_n", host_g.n);
