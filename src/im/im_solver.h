@@ -126,6 +126,8 @@ namespace GPU_HeiProMap {
             combined_JSON += "  \"profile\": " + profile_JSON + "\n";
             combined_JSON += "}";
 
+            std::cout << combined_JSON << std::endl;
+
             // Save to file
             std::ofstream outFile(config.statistics_out);
             if (outFile.is_open()) {

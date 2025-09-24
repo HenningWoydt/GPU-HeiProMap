@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
                 {"--hierarchy", "4:8:6"},
                 {"--distance", "1:10:100"},
                 {"--imbalance", "0.03"},
-                {"--config", "HM"},
+                {"--config", "IM"},
                 {"--seed", "0"},
             };
 
