@@ -68,23 +68,25 @@ namespace GPU_HeiProMap {
         // hierarchy information
         std::string hierarchy_string;
         std::vector<partition_t> hierarchy;
-        partition_t k;
+        partition_t k = 0;
 
         // distance information
         std::string distance_string;
         std::vector<weight_t> distance;
 
         // balancing information
-        f64 imbalance;
+        f64 imbalance = 0.0;
 
         // partitioning algorithm
         std::string config;
 
         // random initialization
-        u64 seed;
+        u64 seed = 0;
 
         // device space info
         std::string device_space;
+
+        Configuration() = default;
 
         Configuration(int argc, char *argv[]) {
             // read command lines into vector
