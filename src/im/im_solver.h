@@ -107,7 +107,7 @@ namespace GPU_HeiProMap {
                 uncoarsening();
                 refinement(max_level, level);
 
-                // std::cout << "Level  " << level << " " << device_graphs.back().n << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
+                std::cout << "Level  " << level << " " << device_graphs.back().n << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
             }
 
             TIME("io", "io", "write_partition",

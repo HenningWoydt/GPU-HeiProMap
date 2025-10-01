@@ -55,10 +55,10 @@ namespace GPU_HeiProMap {
                  m = host_g.m;
                  graph_weight = host_g.graph_weight;
 
-                 vertex_weights = JetDeviceWeights("vertex_weights", host_g.vertex_weights.extent(0));
-                 neighborhood = JetDeviceRowMap("neighborhood", host_g.neighborhood.extent(0));
-                 edges_v = JetDeviceEntries("edges_v", host_g.edges_v.extent(0));
-                 edges_w = JetDeviceValues("edges_w", host_g.edges_w.extent(0));
+                 vertex_weights = JetDeviceWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), host_g.vertex_weights.extent(0));
+                 neighborhood = JetDeviceRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), host_g.neighborhood.extent(0));
+                 edges_v = JetDeviceEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), host_g.edges_v.extent(0));
+                 edges_w = JetDeviceValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), host_g.edges_w.extent(0));
 
                  Kokkos::deep_copy(vertex_weights, host_g.vertex_weights);
                  Kokkos::deep_copy(neighborhood, host_g.neighborhood);
@@ -73,10 +73,10 @@ namespace GPU_HeiProMap {
             m = t_m;
             graph_weight = t_weight;
 
-            vertex_weights = JetDeviceWeights("vertex_weights", n);
-            neighborhood = JetDeviceRowMap("neighborhood", n + 1);
-            edges_v = JetDeviceEntries("edges_v", m);
-            edges_w = JetDeviceValues("edges_w", m);
+            vertex_weights = JetDeviceWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
+            neighborhood = JetDeviceRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
+            edges_v = JetDeviceEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
+            edges_w = JetDeviceValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
         }
 
         jet_partitioner::matrix_t get_mtx() const {
@@ -104,10 +104,10 @@ namespace GPU_HeiProMap {
         host_g.graph_weight = device_g.graph_weight;
 
         // Allocate host views with matching sizes
-        host_g.vertex_weights = JetHostWeights("host_vertex_weights", host_g.n);
-        host_g.neighborhood = JetHostRowMap("host_neighborhood", host_g.n + 1);
-        host_g.edges_v = JetHostEntries("host_edges_v", host_g.m);
-        host_g.edges_w = JetHostValues("host_edges_w", host_g.m);
+        host_g.vertex_weights = JetHostWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_vertex_weights"), host_g.n);
+        host_g.neighborhood = JetHostRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_neighborhood"), host_g.n + 1);
+        host_g.edges_v = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_edges_v"), host_g.m);
+        host_g.edges_w = JetHostValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_edges_w"), host_g.m);
 
         // Deep copy from device to host
         Kokkos::deep_copy(host_g.vertex_weights, device_g.vertex_weights);
@@ -126,9 +126,9 @@ namespace GPU_HeiProMap {
         auto h_values = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), device_g.edges_w);
 
         // Now create Serial-space mirrors
-        JetDeviceRowMap::HostMirror serial_row_map("serial_row_map", h_row_map.extent(0));
-        JetDeviceEntries::HostMirror serial_entries("serial_entries", h_entries.extent(0));
-        JetDeviceValues::HostMirror serial_values("serial_values", h_values.extent(0));
+        JetDeviceRowMap::HostMirror serial_row_map(Kokkos::view_alloc(Kokkos::WithoutInitializing, "serial_row_map"), h_row_map.extent(0));
+        JetDeviceEntries::HostMirror serial_entries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "serial_entries"), h_entries.extent(0));
+        JetDeviceValues::HostMirror serial_values(Kokkos::view_alloc(Kokkos::WithoutInitializing, "serial_values"), h_values.extent(0));
 
         Kokkos::deep_copy(serial_row_map, h_row_map);
         Kokkos::deep_copy(serial_entries, h_entries);
@@ -152,7 +152,7 @@ namespace GPU_HeiProMap {
         auto h_vertex_weights = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), device_g.vertex_weights);
 
         // Create a serial mirror of the host view
-        jet_partitioner::wgt_serial_vt serial_vertex_weights("serial_vertex_weights", h_vertex_weights.extent(0));
+        jet_partitioner::wgt_serial_vt serial_vertex_weights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "serial_vertex_weights"), h_vertex_weights.extent(0));
 
         // Copy host weights into the serial view
         Kokkos::deep_copy(serial_vertex_weights, h_vertex_weights);

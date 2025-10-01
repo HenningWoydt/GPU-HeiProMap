@@ -45,17 +45,17 @@ namespace GPU_HeiProMap {
         explicit HM_Solver(Configuration t_config) : config(std::move(t_config)) {
         }
 
-        std::vector<int> solve() {
+        JetHostPartition solve() {
             TIME("io", "HostGraph", "load",
                  HM_HostGraph g(config.graph_in);
             );
 
             // solve problem
-            std::vector<int> partition = internal_solve(g);
+            JetHostPartition partition = internal_solve(g);
 
             // write output
             TIME("io", "out", "write_partition",
-            write_partition(partition, config.mapping_out);
+            write_partition(partition, g.n, config.mapping_out);
             );
 
             std::string config_JSON = config.to_JSON();
@@ -83,8 +83,8 @@ namespace GPU_HeiProMap {
             return partition;
         }
 
-        std::vector<int> internal_solve(HM_HostGraph &host_g) {
-            JetDevicePartition final_device_partition = JetDevicePartition("final_device_partition", host_g.n);
+        JetHostPartition internal_solve(HM_HostGraph &host_g) {
+            JetDevicePartition final_device_partition = JetDevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "final_device_partition"), host_g.n);
             DeviceScratchMemory scratch_mem(host_g.n, max(config.hierarchy));
 
             // references for better code readability
@@ -112,14 +112,14 @@ namespace GPU_HeiProMap {
             const bool use_ultra = config.config == "HM-ultra";
 
             std::vector<HM_Item> stack;
-            JetHostEntries host_o_to_n("o_to_n", host_g.n);
-            JetHostEntries host_n_to_o("n_to_o", host_g.n);
+            JetHostEntries host_o_to_n(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), host_g.n);
+            JetHostEntries host_n_to_o(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), host_g.n);
             for (int u = 0; u < host_g.n; ++u) {
                 host_o_to_n(u) = u;
                 host_n_to_o(u) = u;
             }
-            JetDeviceEntries device_o_to_n("o_to_n", host_g.n);
-            JetDeviceEntries device_n_to_o("n_to_o", host_g.n);
+            JetDeviceEntries device_o_to_n(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), host_g.n);
+            JetDeviceEntries device_n_to_o(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), host_g.n);
             Kokkos::deep_copy(device_o_to_n, host_o_to_n);
             Kokkos::deep_copy(device_n_to_o, host_n_to_o);
             Kokkos::fence();
@@ -161,12 +161,7 @@ namespace GPU_HeiProMap {
             JetHostPartition final_host_partition = Kokkos::create_mirror(final_device_partition);
             Kokkos::deep_copy(final_host_partition, final_device_partition);
 
-            std::vector<int> partition(host_g.n);
-            for (int u = 0; u < host_g.n; ++u) {
-                partition[u] = final_host_partition(u);
-            }
-
-            return partition;
+            return final_host_partition;
         }
     };
 }

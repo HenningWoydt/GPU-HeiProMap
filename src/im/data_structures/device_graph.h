@@ -69,11 +69,11 @@ namespace GPU_HeiProMap {
              device_g.m = host_g.m;
              device_g.g_weight = host_g.g_weight;
 
-             device_g.weights = DeviceWeight("vertex_weights", host_g.n);
-             device_g.neighborhood = DeviceU32("neighborhood", host_g.n + 1);
-             device_g.edges_u = DeviceVertex("edges_u", host_g.m);
-             device_g.edges_v = DeviceVertex("edges_v", host_g.m);
-             device_g.edges_w = DeviceWeight("edges_w", host_g.m);
+             device_g.weights = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), host_g.n);
+             device_g.neighborhood = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), host_g.n + 1);
+             device_g.edges_u = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_u"), host_g.m);
+             device_g.edges_v = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), host_g.m);
+             device_g.edges_w = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), host_g.m);
 
              Kokkos::deep_copy(device_g.weights, host_g.weights);
              Kokkos::deep_copy(device_g.neighborhood, host_g.neighborhood);
@@ -106,15 +106,16 @@ namespace GPU_HeiProMap {
              coarse_device_g.m = device_g.m; // upper bound, will recompute exactly later
              coarse_device_g.g_weight = device_g.g_weight;
 
-             coarse_device_g.weights = DeviceWeight("vertex_weights", coarse_device_g.n);
-             coarse_device_g.neighborhood = DeviceU32("neighborhood", coarse_device_g.n + 1);
-             DeviceVertex real_neighborhood_sizes = DeviceVertex("real_neighborhood_sizes", coarse_device_g.n);
+             coarse_device_g.weights = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), coarse_device_g.n);
+             coarse_device_g.neighborhood = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), coarse_device_g.n + 1);
+             DeviceVertex real_neighborhood_sizes = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "real_neighborhood_sizes"), coarse_device_g.n);
              Kokkos::deep_copy(real_neighborhood_sizes, 0);
+             Kokkos::fence();
         );
 
         TIME("coarsening", "initialize_device_g", "max_neighborhood_sizes",
         // 1) Per-coarse vertex: max table size and vertex weights
-        DeviceU32 max_neighborhood_sizes = DeviceU32("max_neighborhood_sizes", coarse_device_g.n);
+        DeviceU32 max_neighborhood_sizes = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "max_neighborhood_sizes"), coarse_device_g.n);
         Kokkos::parallel_for("max_neighborhood_size", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
             vertex_t v = matching.matching(u);
             if (u > v) { return; }
@@ -135,7 +136,7 @@ namespace GPU_HeiProMap {
         TIME("coarsening", "initialize_device_g", "hash_offsets",
         // 2) Build per-vertex hash ranges (offsets) and get total slots H
         //    hash_offsets has length n+1 already
-        DeviceU32 hash_offsets = DeviceU32("hash_offsets", coarse_device_g.n + 1);
+        DeviceU32 hash_offsets = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "hash_offsets"), coarse_device_g.n + 1);
         Kokkos::deep_copy(hash_offsets, 0);
         );
 
@@ -149,8 +150,8 @@ namespace GPU_HeiProMap {
 
         TIME("coarsening", "initialize_device_g", "init_hash_keys_values",
         // 3) Allocate hash tables to exact size H (NOT m)
-        DeviceVertex hash_keys("hash_keys", device_g.m);
-        DeviceWeight hash_vals("hash_vals", device_g.m);
+        DeviceVertex hash_keys(Kokkos::view_alloc(Kokkos::WithoutInitializing, "hash_keys"), device_g.m);
+        DeviceWeight hash_vals(Kokkos::view_alloc(Kokkos::WithoutInitializing, "hash_vals"), device_g.m);
 
         // sentinel for “empty”: coarse_device_g.n (fits in vertex_t)
         Kokkos::deep_copy(hash_keys, coarse_device_g.n);
@@ -211,9 +212,9 @@ namespace GPU_HeiProMap {
         );
 
         TIME("coarsening", "initialize_device_g", "allocate_edge_memory",
-        coarse_device_g.edges_u = DeviceVertex("edges_u", coarse_device_g.m);
-        coarse_device_g.edges_v = DeviceVertex("edges_v", coarse_device_g.m);
-        coarse_device_g.edges_w = DeviceWeight("edges_w", coarse_device_g.m);
+        coarse_device_g.edges_u = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_u"), coarse_device_g.m);
+        coarse_device_g.edges_v = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), coarse_device_g.m);
+        coarse_device_g.edges_w = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), coarse_device_g.m);
         );
 
         TIME("coarsening", "initialize_device_g", "materialize_edges",
@@ -259,10 +260,10 @@ namespace GPU_HeiProMap {
         host_g.m = device_g.m;
         host_g.g_weight = device_g.g_weight;
 
-        host_g.weights = HostWeight("weights_host", device_g.n);
-        host_g.neighborhood = HostVertex("neighborhood_host", device_g.n + 1);
-        host_g.edges_v = HostVertex("edges_v_host", device_g.m);
-        host_g.edges_w = HostWeight("edges_w_host", device_g.m);
+        host_g.weights = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "weights_host"), device_g.n);
+        host_g.neighborhood = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood_host"), device_g.n + 1);
+        host_g.edges_v = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v_host"), device_g.m);
+        host_g.edges_w = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w_host"), device_g.m);
 
         Kokkos::deep_copy(host_g.weights, device_g.weights);
         Kokkos::deep_copy(host_g.neighborhood, device_g.neighborhood);

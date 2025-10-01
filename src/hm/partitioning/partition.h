@@ -94,7 +94,7 @@ namespace GPU_HeiProMap {
                                             bool use_ultra) {
         if (k == 1) {
             TIME("partition", "jet", "K=1",
-                 JetDevicePartition partition("k=1 partition", device_g.n);
+                 JetDevicePartition partition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "k=1 partition"), device_g.n);
                  Kokkos::deep_copy(partition, 0);
                  Kokkos::fence();
             );
@@ -172,8 +172,8 @@ namespace GPU_HeiProMap {
         }
 
         // second pass, build translation table
-        JetHostEntries o_to_n_sub = JetHostEntries("o_to_n", global_n);
-        JetHostEntries n_to_o_sub = JetHostEntries("n_to_o", sub_n);
+        JetHostEntries o_to_n_sub = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), global_n);
+        JetHostEntries n_to_o_sub = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), sub_n);
 
         int counter = 0;
         for (int u = 0; u < n; ++u) {
@@ -218,10 +218,10 @@ namespace GPU_HeiProMap {
         // upload from host to device
         HM_DeviceGraph device_sub_g(host_sub_g);
 
-        JetDeviceEntries device_n_to_o_sub("device_n_to_o", n_to_o_sub.extent(0));
+        JetDeviceEntries device_n_to_o_sub(Kokkos::view_alloc(Kokkos::WithoutInitializing, "device_n_to_o"), n_to_o_sub.extent(0));
         Kokkos::deep_copy(device_n_to_o_sub, n_to_o_sub);
 
-        JetDeviceEntries device_o_to_n_sub("device_o_to_n", o_to_n_sub.extent(0));
+        JetDeviceEntries device_o_to_n_sub(Kokkos::view_alloc(Kokkos::WithoutInitializing, "device_o_to_n"), o_to_n_sub.extent(0));
         Kokkos::deep_copy(device_o_to_n_sub, o_to_n_sub);
         Kokkos::fence();
 

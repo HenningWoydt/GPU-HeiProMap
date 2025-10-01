@@ -56,10 +56,12 @@ namespace GPU_HeiProMap {
             m = t_m;
             g_weight = t_weight;
 
-            weights = HostWeight("vertex_weights", n);
-            neighborhood = HostVertex("neighborhood", n + 1);
-            edges_v = HostVertex("edges_v", m);
-            edges_w = HostWeight("edges_w", m);
+            g_weight = 0;
+            weights = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
+            neighborhood = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
+            neighborhood(0) = 0;
+            edges_v = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
+            edges_w = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
         }
 
         explicit HostGraph(const std::string &file_path) {
@@ -68,13 +70,13 @@ namespace GPU_HeiProMap {
                 exit(EXIT_FAILURE);
             }
 
-            std::ifstream file(file_path);
-            if (!file.is_open()) {
-                std::cerr << "Could not open file " << file_path << "!" << std::endl;
-                exit(EXIT_FAILURE);
-            }
+            // Open in binary; give a large buffer (e.g., 32 MB).
+            std::ifstream file(file_path, std::ios::binary);
+            static std::vector<char> big_buf(32u << 20); // 32 MB
+            file.rdbuf()->pubsetbuf(big_buf.data(), (long) big_buf.size());
 
-            std::string line(64, ' ');
+            std::string line;
+            line.reserve(1u << 20); // 1 MB per line buffer to reduce reallocs
             bool has_v_weights = false;
             bool has_e_weights = false;
 
@@ -89,11 +91,11 @@ namespace GPU_HeiProMap {
 
                 // allocate space
                 g_weight = 0;
-                weights = HostWeight("vertex_weights", n);
-                neighborhood = HostVertex("neighborhood", n + 1);
+                weights = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
+                neighborhood = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
                 neighborhood(0) = 0;
-                edges_v = HostVertex("edges_v", m);
-                edges_w = HostWeight("edges_w", m);
+                edges_v = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
+                edges_w = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
 
                 // read in header
                 std::string fmt = "000";
@@ -108,13 +110,13 @@ namespace GPU_HeiProMap {
 
             // read in edges
             vertex_t u = 0;
-            std::vector<vertex_t> ints;
+            std::vector<vertex_t> ints(n);
             vertex_t curr_m = 0;
 
             while (std::getline(file, line)) {
                 if (line[0] == '%') { continue; }
                 // convert the lines into ints
-                str_to_ints(line, ints);
+                size_t size = str_to_ints(line, ints);
 
                 size_t i = 0;
 
@@ -124,7 +126,7 @@ namespace GPU_HeiProMap {
                 weights(u) = w;
                 g_weight += w;
 
-                while (i < ints.size()) {
+                while (i < size) {
                     vertex_t v = ints[i++] - 1;
 
                     // check if edge weights

@@ -190,10 +190,6 @@ else
   KOKKOS_ARCH="-DKokkos_ARCH_NATIVE=ON"
 fi
 
-# Optional but often helpful:
-# - LTO/IPO (if your toolchain supports it)
-EXTRA_FLAGS="-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON"
-
 # Strong optimization defaults for Release (keep warnings mute flag if you want)
 CXX_RELEASE_FLAGS="-O3 -DNDEBUG -march=native -mtune=native -fno-math-errno -fomit-frame-pointer"
 # If you accept non-IEEE behavior, add (optional): -ffast-math
@@ -207,7 +203,6 @@ if (
     ${KOKKOS_COMMON} \
     ${KOKKOS_BACKEND} \
     ${KOKKOS_ARCH} \
-    ${EXTRA_FLAGS} \
     -DCMAKE_CXX_STANDARD=17 \
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DKokkosKernels_ENABLE_TESTS=OFF \
@@ -240,7 +235,6 @@ if (
     -DCMAKE_CXX_FLAGS="-w" \
     ${KOKKOS_BACKEND} \
     ${KOKKOS_ARCH} \
-    ${EXTRA_FLAGS} \
     > /dev/null 2>&1 \
   && make install -j "$JOBS" > /dev/null 2>&1
 ); then
