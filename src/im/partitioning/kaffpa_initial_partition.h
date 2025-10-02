@@ -27,7 +27,7 @@
 #ifndef GPU_HEIPROMAP_KAFFPA_INITIAL_PARTITION_H
 #define GPU_HEIPROMAP_KAFFPA_INITIAL_PARTITION_H
 
-#include "interface/kaHIP_interface.h"
+#include "../../../extern/local/kahip/include/kaHIP_interface.h"
 
 #include "../../utility/definitions.h"
 #include "../data_structures/device_graph.h"

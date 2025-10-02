@@ -90,39 +90,60 @@ GCC=$(which gcc || true)
 echo "Root          : ${ROOT}"
 echo "Using C compiler: ${GCC:-<system default>}"
 
-# update all submodules
-git submodule update --init --recursive
-
 # make local folder for all includes
 mkdir -p extern
 cd extern && rm -rf local && mkdir local && cd "${ROOT}"
 
-# install GKLIB into a local folder
-export CFLAGS="-Wall -Wno-error=pedantic -Wno-error -D_GNU_SOURCE -DHAVE_STRDUP=1"
-export CPPFLAGS="-Wall -Wno-error=pedantic -Wno-error -D_GNU_SOURCE -DHAVE_STRDUP=1"
-
-echo "Building GKlib..."
-if cd "${ROOT}/extern/GKlib" && rm -rf build \
-  && make config prefix="${ROOT}/extern/local" cc="${GCC}" > /dev/null 2>&1 \
-  && make install > /dev/null 2>&1; then
-  echo "GKlib build completed successfully."
+# --- Download GKlib (latest release) ---
+echo "Downloading GKlib..."
+if (
+  cd extern \
+  && rm -f gklib.tar.gz \
+  && rm -rf GKlib \
+  && wget -q https://github.com/KarypisLab/GKlib/archive/refs/heads/master.tar.gz -O gklib.tar.gz \
+  && tar -xzf gklib.tar.gz \
+  && mv GKlib-master GKlib \
+  && rm -f gklib.tar.gz
+); then
+  echo "GKlib downloaded and extracted successfully."
 else
-  echo "GKlib build failed!" >&2
+  echo "Failed to download GKlib!" >&2
   exit 1
 fi
-cd "${ROOT}"
 
-echo "Building METIS..."
-if cd "${ROOT}/extern/METIS" \
-  && rm -rf build \
-  && make config prefix="${ROOT}/extern/local" gklib_path="${ROOT}/extern/local" cc="${GCC}" > /dev/null 2>&1 \
-  && make install > /dev/null 2>&1; then
-  echo "METIS build completed successfully."
+# --- Download METIS 5.2.1 ---
+echo "Downloading METIS 5.2.1..."
+if (
+  cd extern \
+  && rm -f metis-5.2.1.tar.gz \
+  && rm -rf METIS \
+  && wget -q https://github.com/KarypisLab/METIS/archive/refs/tags/v5.2.1.tar.gz -O metis-5.2.1.tar.gz \
+  && tar -xzf metis-5.2.1.tar.gz \
+  && mv METIS-5.2.1 METIS \
+  && rm -f metis-5.2.1.tar.gz
+); then
+  echo "METIS 5.2.1 downloaded and extracted successfully."
 else
-  echo "METIS build failed!" >&2
+  echo "Failed to download METIS v5.2.1!" >&2
   exit 1
 fi
-cd "${ROOT}"
+
+# --- Download KaHIP 3.19 ---
+echo "Downloading KaHIP 3.19..."
+if (
+  cd extern \
+  && rm -f v3.19.tar.gz \
+  && rm -rf KaHIP \
+  && wget -q https://github.com/KaHIP/KaHIP/archive/refs/tags/v3.19.tar.gz \
+  && tar -xzf v3.19.tar.gz \
+  && mv KaHIP-3.19 KaHIP \
+  && rm -f v3.19.tar.gz
+); then
+  echo "KaHIP 3.19 downloaded and extracted successfully."
+else
+  echo "Failed to download KaHIP!" >&2
+  exit 1
+fi
 
 # --- Download Kokkos-Kernels 4.7.00 ---
 echo "Downloading Kokkos-Kernels 4.7.00..."
@@ -156,6 +177,24 @@ else
   exit 1
 fi
 
+# --- Download Jet-Partitioner (main) ---
+echo "Downloading Jet-Partitioner..."
+if (
+  cd extern \
+  && rm -f jet-partitioner.tar.gz \
+  && rm -rf Jet-Partitioner \
+  && wget -q https://github.com/sandialabs/Jet-Partitioner/archive/refs/heads/main.tar.gz -O jet-partitioner.tar.gz \
+  && tar -xzf jet-partitioner.tar.gz \
+  && mv Jet-Partitioner-main Jet-Partitioner \
+  && rm -f jet-partitioner.tar.gz
+); then
+  echo "Jet-Partitioner downloaded and extracted successfully."
+else
+  echo "Failed to download Jet-Partitioner!" >&2
+  exit 1
+fi
+
+
 # Compiler for CMake (C++): GCC by default; Kokkos nvcc_wrapper when CUDA
 if [ "$USE_CUDA" = "ON" ]; then
   export CXX="${ROOT}/extern/kokkos-4.7.00/bin/nvcc_wrapper"
@@ -168,6 +207,60 @@ else
   export CXX="${CXX:-g++}"
 fi
 echo "Using C++ compiler: ${CXX}"
+
+if [ "$USE_CUDA" = "ON" ]; then
+  # Make the define visible to every TU compiled by nvcc_wrapper (host+device).
+  export NVCC_PREPEND_FLAGS="${NVCC_PREPEND_FLAGS:-} -DTHRUST_DISABLE_EXCEPTIONS"
+  export NVCC_PREPEND_FLAGS="${NVCC_PREPEND_FLAGS} -Xcompiler -fexceptions"
+fi
+
+
+# install GKLIB into a local folder
+export CFLAGS="-Wall -Wno-error=pedantic -Wno-error -D_GNU_SOURCE -DHAVE_STRDUP=1"
+export CPPFLAGS="-Wall -Wno-error=pedantic -Wno-error -D_GNU_SOURCE -DHAVE_STRDUP=1"
+
+echo "Building GKlib..."
+if cd "${ROOT}/extern/GKlib" && rm -rf build \
+  && make config prefix="${ROOT}/extern/local" cc="${GCC}" > /dev/null 2>&1 \
+  && make install > /dev/null 2>&1; then
+  echo "GKlib build completed successfully."
+else
+  echo "GKlib build failed!" >&2
+  exit 1
+fi
+cd "${ROOT}"
+
+echo "Building METIS..."
+if cd "${ROOT}/extern/METIS" \
+  && rm -rf build \
+  && make config prefix="${ROOT}/extern/local" gklib_path="${ROOT}/extern/local" cc="${GCC}" > /dev/null 2>&1 \
+  && make install > /dev/null 2>&1; then
+  echo "METIS build completed successfully."
+else
+  echo "METIS build failed!" >&2
+  exit 1
+fi
+cd "${ROOT}"
+
+# --- build KaHIP ---
+echo "Building KaHIP 3.19..."
+if (
+  cd "${ROOT}/extern/KaHIP" \
+  && mkdir -p build && cd build \
+  && cmake .. \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="${ROOT}/extern/local/kahip" \
+    -DNOMPI=ON \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    > /dev/null 2>&1 \
+  && make install -j "$JOBS" > /dev/null 2>&1
+); then
+  echo "KaHIP 3.19 build completed successfully."
+else
+  echo "KaHIP 3.19 build failed!" >&2
+  exit 1
+fi
+cd "${ROOT}"
 
 # ---- backend-specific flags ----
 # Common
@@ -207,7 +300,7 @@ if (
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DKokkosKernels_ENABLE_TESTS=OFF \
     -DCMAKE_CXX_FLAGS_RELEASE="${CXX_RELEASE_FLAGS}" \
-    -DCMAKE_CXX_FLAGS="-w" \
+    -DCMAKE_CXX_FLAGS="-w -DTHRUST_DISABLE_EXCEPTIONS" \
     ${ARCH_FLAG:+-D${ARCH_FLAG}} \
     > /dev/null 2>&1 \
   && make install -j "$JOBS" > /dev/null 2>&1
@@ -232,7 +325,7 @@ if (
     -DKokkosKernels_ENABLE_EXAMPLES=OFF \
     -DKokkosKernels_ENABLE_PERFTESTS=OFF \
     -DCMAKE_CXX_FLAGS_RELEASE="${CXX_RELEASE_FLAGS}" \
-    -DCMAKE_CXX_FLAGS="-w" \
+    -DCMAKE_CXX_FLAGS="-w -DTHRUST_DISABLE_EXCEPTIONS" \
     ${KOKKOS_BACKEND} \
     ${KOKKOS_ARCH} \
     > /dev/null 2>&1 \
@@ -263,7 +356,7 @@ if (
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DLINK_GKLIB=True \
     -DMETIS_HINT="${ROOT}/extern/local" \
-    -DCMAKE_CXX_FLAGS="-w" \
+    -DCMAKE_CXX_FLAGS="-w -DTHRUST_DISABLE_EXCEPTIONS" \
     > /dev/null 2>&1 \
   && make install -j "$JOBS" > /dev/null 2>&1
 ); then

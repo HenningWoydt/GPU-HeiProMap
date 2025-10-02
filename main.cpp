@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
     if (argc == 1) {
         Configuration config;
         config.print_help_message();
-        return 0;
+        // return 0;
         {
             std::vector<std::pair<std::string, std::string> > input = {
                 {"--graph", "../../graph_collection/mapping/rgg24.graph"}, // SharedMap comm cost 10 243 578
@@ -50,7 +50,7 @@ int main(int argc, char *argv[]) {
                 {"--hierarchy", "4:8:6"},
                 {"--distance", "1:10:100"},
                 {"--imbalance", "0.03"},
-                {"--config", "IM"},
+                {"--config", "HM"},
                 {"--seed", "0"},
             };
 

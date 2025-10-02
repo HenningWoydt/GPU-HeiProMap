@@ -49,23 +49,23 @@ namespace GPU_HeiProMap {
         JetHostValues edges_w;
 
         HM_HostGraph() {
-            n            = 0;
-            m            = 0;
+            n = 0;
+            m = 0;
             graph_weight = 0;
         }
 
         HM_HostGraph(const int t_n, const int t_m, const int t_weight) {
-            n            = t_n;
-            m            = t_m;
+            n = t_n;
+            m = t_m;
             graph_weight = t_weight;
 
             vertex_weights = JetHostWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
-            neighborhood   = JetHostRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
-            edges_v        = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
-            edges_w        = JetHostValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
+            neighborhood = JetHostRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
+            edges_v = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
+            edges_w = JetHostValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
         }
 
-        explicit HM_HostGraph(const std::string& file_path) {
+        explicit HM_HostGraph(const std::string &file_path) {
             if (!file_exists(file_path)) {
                 std::cerr << "File " << file_path << " does not exist!" << std::endl;
                 exit(EXIT_FAILURE);
@@ -87,16 +87,16 @@ namespace GPU_HeiProMap {
 
                 // read in header
                 std::vector<std::string> header = split_ws(line);
-                n                               = std::stoi(header[0]);
-                m                               = std::stoi(header[1]) * 2;
+                n = std::stoi(header[0]);
+                m = std::stoi(header[1]) * 2;
 
                 // allocate space
-                graph_weight    = 0;
-                vertex_weights  = JetHostWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
-                neighborhood    = JetHostRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
+                graph_weight = 0;
+                vertex_weights = JetHostWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
+                neighborhood = JetHostRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
                 neighborhood(0) = 0;
-                edges_v         = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
-                edges_w         = JetHostValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
+                edges_v = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
+                edges_w = JetHostValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
 
                 // read in header
                 std::string fmt = "000";
@@ -110,36 +110,83 @@ namespace GPU_HeiProMap {
             }
 
             // read in edges
-            int u = 0;
-            std::vector<int> ints(n);
             int curr_m = 0;
+            std::vector<int> ints(n);
 
-            while (std::getline(file, line)) {
-                if (line[0] == '%') { continue; }
-                // convert the lines into ints
-                size_t size = str_to_ints(line, ints);
+            if (!has_v_weights) {
+                graph_weight = n;
+                for (int u = 0; u < n; ++u) { vertex_weights(u) = 1; }
 
-                size_t i = 0;
+                if (!has_e_weights) {
+                    for (int i = 0; i < m; ++i) { edges_w(i) = 1; }
 
-                // check if vertex weights
-                int w = 1;
-                if (has_v_weights) { w = ints[i++]; }
-                vertex_weights(u) = w;
-                graph_weight += w;
+                    int u = 0;
+                    while (std::getline(file, line)) {
+                        if (line[0] == '%') { continue; }
+                        // convert the lines into ints
+                        size_t size = str_to_ints(line, ints);
 
-                while (i < size) {
-                    int v = ints[i++] - 1;
+                        size_t i = 0;
+                        while (i < size) {
+                            edges_v(curr_m) = ints[i++] - 1;
+                            curr_m += 1;
+                        }
+                        neighborhood(u + 1) = curr_m;
 
-                    // check if edge weights
-                    w = 1;
-                    if (has_e_weights) { w = ints[i++]; }
-                    edges_v(curr_m) = v;
-                    edges_w(curr_m) = w;
-                    curr_m += 1;
+                        u += 1;
+                    }
+                } else {
+
+                    int u = 0;
+                    while (std::getline(file, line)) {
+                        if (line[0] == '%') { continue; }
+                        // convert the lines into ints
+                        size_t size = str_to_ints(line, ints);
+
+                        size_t i = 0;
+
+                        while (i < size) {
+                            int v = ints[i++] - 1;
+                            weight_t w = ints[i++];
+
+                            edges_v(curr_m) = v;
+                            edges_w(curr_m) = w;
+                            curr_m += 1;
+                        }
+                        neighborhood(u + 1) = curr_m;
+
+                        u += 1;
+                    }
                 }
-                neighborhood(u + 1) = curr_m;
+            } else {
+                int u = 0;
 
-                u += 1;
+                while (std::getline(file, line)) {
+                    if (line[0] == '%') { continue; }
+                    // convert the lines into ints
+                    size_t size = str_to_ints(line, ints);
+
+                    size_t i = 0;
+
+                    // check if vertex weights
+                    int w = ints[i++];
+                    vertex_weights(u) = w;
+                    graph_weight += w;
+
+                    while (i < size) {
+                        int v = ints[i++] - 1;
+
+                        // check if edge weights
+                        w = 1;
+                        if (has_e_weights) { w = ints[i++]; }
+                        edges_v(curr_m) = v;
+                        edges_w(curr_m) = w;
+                        curr_m += 1;
+                    }
+                    neighborhood(u + 1) = curr_m;
+
+                    u += 1;
+                }
             }
 
             if (curr_m != m) {
@@ -157,10 +204,10 @@ namespace GPU_HeiProMap {
         int weight(const int u, const size_t i) const { return edges_w(neighborhood(u) + i); }
     };
 
-    inline bool validate_host_graph(const HM_HostGraph& g) {
+    inline bool validate_host_graph(const HM_HostGraph &g) {
         using edge_offset_t = jet_partitioner::edge_offset_t;
-        using ordinal_t     = jet_partitioner::ordinal_t;
-        using value_t       = jet_partitioner::value_t;
+        using ordinal_t = jet_partitioner::ordinal_t;
+        using value_t = jet_partitioner::value_t;
 
         // 1) Basic size checks
         if (g.n < 0) {
@@ -171,19 +218,19 @@ namespace GPU_HeiProMap {
             std::cerr << "Invalid m: " << g.m << "\n";
             return false;
         }
-        if ((int)g.vertex_weights.extent(0) != g.n) {
+        if ((int) g.vertex_weights.extent(0) != g.n) {
             std::cerr << "vertex_weights size " << g.vertex_weights.extent(0) << " != n (" << g.n << ")\n";
             return false;
         }
-        if ((int)g.neighborhood.extent(0) != g.n + 1) {
+        if ((int) g.neighborhood.extent(0) != g.n + 1) {
             std::cerr << "neighborhood size " << g.neighborhood.extent(0) << " != n+1 (" << (g.n + 1) << ")\n";
             return false;
         }
-        if ((int)g.edges_v.extent(0) != g.m) {
+        if ((int) g.edges_v.extent(0) != g.m) {
             std::cerr << "edges_v size " << g.edges_v.extent(0) << " != m (" << g.m << ")\n";
             return false;
         }
-        if ((int)g.edges_w.extent(0) != g.m) {
+        if ((int) g.edges_w.extent(0) != g.m) {
             std::cerr << "edges_w size " << g.edges_w.extent(0) << " != m (" << g.m << ")\n";
             return false;
         }
@@ -234,17 +281,17 @@ namespace GPU_HeiProMap {
         return true;
     }
 
-    inline bool validate_no_self_loops_and_duplicates(const HM_HostGraph& g) {
+    inline bool validate_no_self_loops_and_duplicates(const HM_HostGraph &g) {
         // Basic structure sanity (optional, rely on previous validate_host_graph)
-        if ((int)g.neighborhood.extent(0) != g.n + 1 ||
-            (int)g.edges_v.extent(0) != g.m) {
+        if ((int) g.neighborhood.extent(0) != g.n + 1 ||
+            (int) g.edges_v.extent(0) != g.m) {
             std::cerr << "CSR structure invalid: neighborhood size " << g.neighborhood.extent(0) << " (expected " << (g.n + 1) << "), edges_v size " << g.edges_v.extent(0) << " (expected " << g.m << ")\n";
             return false;
         }
 
         for (int u = 0; u < g.n; ++u) {
             int row_begin = g.neighborhood(u);
-            int row_end   = g.neighborhood(u + 1);
+            int row_end = g.neighborhood(u + 1);
 
             std::unordered_set<int> seen;
             seen.reserve(row_end - row_begin);
@@ -276,13 +323,13 @@ namespace GPU_HeiProMap {
         // check connected both ways
         for (int u = 0; u < g.n; ++u) {
             int row_begin = g.neighborhood(u);
-            int row_end   = g.neighborhood(u + 1);
+            int row_end = g.neighborhood(u + 1);
 
             for (int i = row_begin; i < row_end; ++i) {
                 int v = g.edges_v(i);
 
                 int row_begin_v = g.neighborhood(v);
-                int row_end_v   = g.neighborhood(v + 1);
+                int row_end_v = g.neighborhood(v + 1);
                 bool found = false;
                 for (int j = row_begin_v; j < row_end_v; ++j) {
                     int uu = g.edges_v(j);
@@ -295,7 +342,6 @@ namespace GPU_HeiProMap {
                     std::cerr << "Edge " << u << " " << v << " not connected both ways\n";
                     return false;
                 }
-
             }
         }
 
@@ -304,7 +350,7 @@ namespace GPU_HeiProMap {
     }
 
 
-    inline void write_metis(const HM_HostGraph& g, const std::string& filename) {
+    inline void write_metis(const HM_HostGraph &g, const std::string &filename) {
         // sanity check
         assert(g.n >= 0 && g.m >= 0);
         assert((int)g.neighborhood.extent(0) == g.n + 1);
@@ -321,7 +367,7 @@ namespace GPU_HeiProMap {
         // 3) Emit adjacency lists (1-based indices)
         for (int u = 0; u < g.n; ++u) {
             int rowStart = g.neighborhood(u);
-            int rowEnd   = g.neighborhood(u + 1);
+            int rowEnd = g.neighborhood(u + 1);
             for (int e = rowStart; e < rowEnd; ++e) {
                 int v = g.edges_v(e);
                 out << (v + 1) << " ";

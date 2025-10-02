@@ -50,16 +50,18 @@ namespace GPU_HeiProMap {
         }
 
         explicit HM_DeviceGraph(const HM_HostGraph &host_g) {
-            TIME("io", "initialize_device_g", "copy",
+            TIME("io", "initialize_device_g", "initialize",
                  n = host_g.n;
                  m = host_g.m;
                  graph_weight = host_g.graph_weight;
 
-                 vertex_weights = JetDeviceWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), host_g.vertex_weights.extent(0));
-                 neighborhood = JetDeviceRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), host_g.neighborhood.extent(0));
-                 edges_v = JetDeviceEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), host_g.edges_v.extent(0));
-                 edges_w = JetDeviceValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), host_g.edges_w.extent(0));
+                 vertex_weights = JetDeviceWeights(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
+                 neighborhood = JetDeviceRowMap(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
+                 edges_v = JetDeviceEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
+                 edges_w = JetDeviceValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
+            );
 
+            TIME("io", "initialize_device_g", "copy",
                  Kokkos::deep_copy(vertex_weights, host_g.vertex_weights);
                  Kokkos::deep_copy(neighborhood, host_g.neighborhood);
                  Kokkos::deep_copy(edges_v, host_g.edges_v);

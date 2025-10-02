@@ -150,7 +150,7 @@ namespace GPU_HeiProMap {
             std::fprintf(out, "=================================================\n");
         }
 
-        // --------- JSON export (nested) ----------
+        // --------- JSON export (nested, pretty-printed) ----------
         std::string to_JSON() const {
             auto esc = [](const std::string &s) {
                 std::ostringstream e;
@@ -162,72 +162,123 @@ namespace GPU_HeiProMap {
                 return e.str();
             };
 
+            auto indent = [](std::ostringstream &oss, int level) {
+                for (int i = 0; i < level; ++i) oss << '\t'; // tabs for indentation
+            };
+
             std::ostringstream oss;
             oss.setf(std::ios::fixed);
             oss.precision(6);
-            oss << "{";
+
+            int lvl = 0;
+            oss << "{\n";
 
             // overall total (only total_ms)
-            oss << "\"total\":{"
-                    "\"total_ms\":" << total_.total_ms << "},";
+            indent(oss, ++lvl);
+            oss << "\"total\": {\n";
+            indent(oss, ++lvl);
+            oss << "\"total_ms\": " << total_.total_ms << "\n";
+            indent(oss, --lvl);
+            oss << "},\n";
 
             // groups (sorted by total time desc)
-            oss << "\"groups\":{";
-            bool first_g = true;
+            indent(oss, lvl);
+            oss << "\"groups\": {\n";
+            ++lvl;
+
             std::vector<std::pair<std::string, KTGroup const *> > gs;
             for (auto &kv: groups_) gs.emplace_back(kv.first, &kv.second);
             std::sort(gs.begin(), gs.end(),
                       [](auto &a, auto &b) { return a.second->agg.total_ms > b.second->agg.total_ms; });
 
+            bool first_g = true;
             for (auto &[gname, gptr]: gs) {
-                if (!first_g) oss << ",";
+                if (!first_g) oss << ",\n";
                 first_g = false;
-                const auto &g = *gptr;
 
-                oss << "\"" << esc(gname) << "\":{";
-                oss << "\"total_ms\":" << g.agg.total_ms << ",";
+                indent(oss, lvl);
+                oss << "\"" << esc(gname) << "\": {\n";
+                ++lvl;
 
-                // functions (sorted by total time desc)
-                oss << "\"functions\":{";
-                bool first_f = true;
+                // group total
+                indent(oss, lvl);
+                oss << "\"total_ms\": " << gptr->agg.total_ms << ",\n";
+
+                // functions
+                indent(oss, lvl);
+                oss << "\"functions\": {\n";
+                ++lvl;
+
                 std::vector<std::pair<std::string, KTKernels const *> > fs;
-                for (auto &fk: g.functions) fs.emplace_back(fk.first, &fk.second);
+                for (auto &fk: gptr->functions) fs.emplace_back(fk.first, &fk.second);
                 std::sort(fs.begin(), fs.end(),
                           [](auto &a, auto &b) { return a.second->agg.total_ms > b.second->agg.total_ms; });
 
+                bool first_f = true;
                 for (auto &[fname, fptr]: fs) {
-                    if (!first_f) oss << ",";
+                    if (!first_f) oss << ",\n";
                     first_f = false;
-                    const auto &f = *fptr;
 
-                    oss << "\"" << esc(fname) << "\":{";
-                    oss << "\"total_ms\":" << f.agg.total_ms << ",";
+                    indent(oss, lvl);
+                    oss << "\"" << esc(fname) << "\": {\n";
+                    ++lvl;
 
-                    // kernels (sorted by total time desc) — include calls & avg_ms here
-                    oss << "\"kernels\":{";
-                    bool first_k = true;
+                    // function total
+                    indent(oss, lvl);
+                    oss << "\"total_ms\": " << fptr->agg.total_ms << ",\n";
+
+                    // kernels
+                    indent(oss, lvl);
+                    oss << "\"kernels\": {\n";
+                    ++lvl;
+
                     std::vector<std::pair<std::string, KTStat const *> > ks;
-                    for (auto &kk: f.kernels) ks.emplace_back(kk.first, &kk.second);
+                    for (auto &kk: fptr->kernels) ks.emplace_back(kk.first, &kk.second);
                     std::sort(ks.begin(), ks.end(),
                               [](auto &a, auto &b) { return a.second->total_ms > b.second->total_ms; });
 
+                    bool first_k = true;
                     for (auto &[kname, kstat]: ks) {
-                        if (!first_k) oss << ",";
+                        if (!first_k) oss << ",\n";
                         first_k = false;
-                        oss << "\"" << esc(kname) << "\":{"
-                                "\"calls\":" << kstat->calls << ","
-                                "\"total_ms\":" << kstat->total_ms << ","
-                                "\"avg_ms\":" << kstat->avg()
-                                << "}";
-                    }
-                    oss << "}"; // kernels
-                    oss << "}"; // function
-                }
-                oss << "}"; // functions
-                oss << "}"; // group
-            }
-            oss << "}"; // groups
 
+                        indent(oss, lvl);
+                        oss << "\"" << esc(kname) << "\": {\n";
+                        ++lvl;
+                        indent(oss, lvl);
+                        oss << "\"calls\": " << kstat->calls << ",\n";
+                        indent(oss, lvl);
+                        oss << "\"total_ms\": " << kstat->total_ms << ",\n";
+                        indent(oss, lvl);
+                        oss << "\"avg_ms\": " << kstat->avg() << "\n";
+                        --lvl;
+                        indent(oss, lvl);
+                        oss << "}";
+                    }
+                    oss << "\n";
+                    --lvl;
+                    indent(oss, lvl);
+                    oss << "}\n"; // end kernels
+
+                    --lvl;
+                    indent(oss, lvl);
+                    oss << "}";
+                }
+                oss << "\n";
+                --lvl;
+                indent(oss, lvl);
+                oss << "}\n"; // end functions
+
+                --lvl;
+                indent(oss, lvl);
+                oss << "}";
+            }
+            oss << "\n";
+            --lvl;
+            indent(oss, lvl);
+            oss << "}\n"; // end groups
+
+            --lvl;
             oss << "}";
             return oss.str();
         }
