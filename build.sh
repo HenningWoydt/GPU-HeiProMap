@@ -356,6 +356,7 @@ if (
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DLINK_GKLIB=True \
     -DMETIS_HINT="${ROOT}/extern/local" \
+    -DCMAKE_CXX_FLAGS_RELEASE="${CXX_RELEASE_FLAGS}" \
     -DCMAKE_CXX_FLAGS="-w -DTHRUST_DISABLE_EXCEPTIONS" \
     > /dev/null 2>&1 \
   && make install -j "$JOBS" > /dev/null 2>&1
@@ -375,5 +376,6 @@ cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release \
          -DCMAKE_PREFIX_PATH="${ROOT}/extern/local/kokkos;${ROOT}/extern/local/kokkos-kernels" \
          -DCMAKE_CXX_STANDARD=17 \
-         -DCMAKE_CXX_EXTENSIONS=OFF
+         -DCMAKE_CXX_EXTENSIONS=OFF \
+         -DCMAKE_CXX_FLAGS_RELEASE="${CXX_RELEASE_FLAGS}"
 cmake --build . --parallel "$JOBS" --target GPU-HeiProMap

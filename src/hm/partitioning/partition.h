@@ -50,6 +50,7 @@ namespace GPU_HeiProMap {
             Kokkos::fence();
             return partition;
         }
+        ScopedTimer _t_mtx("partitioning", "jet_partition", "get_mtx");
 
         jet_partitioner::config_t config;
         config.max_imb_ratio = 1.0 + imbalance;
@@ -62,7 +63,6 @@ namespace GPU_HeiProMap {
         jet_partitioner::value_t edge_cut;
         jet_partitioner::experiment_data<jet_partitioner::value_t> data;
 
-        ScopedTimer _t_mtx("partitioning", "jet_partition", "get_mtx");
         jet_partitioner::matrix_t mtx = device_g.get_mtx();
         _t_mtx.stop();
 

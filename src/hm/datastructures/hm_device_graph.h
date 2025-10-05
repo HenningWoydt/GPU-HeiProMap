@@ -43,7 +43,7 @@ namespace GPU_HeiProMap {
         JetDeviceEntries edges_v;
         JetDeviceValues edges_w;
 
-        explicit HM_DeviceGraph(const HM_HostGraph &host_g) {
+        explicit HM_DeviceGraph(const HM_HostGraph &host_g) noexcept {
             ScopedTimer _t_allocate("io", "HM_DeviceGraph", "allocate");
             n = host_g.n;
             m = host_g.m;
@@ -57,14 +57,16 @@ namespace GPU_HeiProMap {
             _t_allocate.stop();
             ScopedTimer _t_copy("io", "HM_DeviceGraph", "copy");
 
-            Kokkos::deep_copy(vertex_weights, host_g.vertex_weights);
-            Kokkos::deep_copy(neighborhood, host_g.neighborhood);
-            Kokkos::deep_copy(edges_v, host_g.edges_v);
-            Kokkos::deep_copy(edges_w, host_g.edges_w);
-            Kokkos::fence();
+            auto exec = Kokkos::DefaultExecutionSpace{};
+            Kokkos::deep_copy(exec, vertex_weights, host_g.vertex_weights);
+            Kokkos::deep_copy(exec, neighborhood, host_g.neighborhood);
+            Kokkos::deep_copy(exec, edges_v, host_g.edges_v);
+            Kokkos::deep_copy(exec, edges_w, host_g.edges_w);
+            exec.fence();
+            // Kokkos::fence();
         }
 
-        HM_DeviceGraph(const int t_n, const int t_m, const int t_weight) {
+        HM_DeviceGraph(const int t_n, const int t_m, const int t_weight) noexcept {
             ScopedTimer _t_allocate("io", "HM_DeviceGraph", "allocate");
             n = t_n;
             m = t_m;
@@ -76,7 +78,7 @@ namespace GPU_HeiProMap {
             edges_w = JetDeviceValues(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), (size_t) m);
         }
 
-        jet_partitioner::matrix_t get_mtx() const {
+        jet_partitioner::matrix_t get_mtx() const noexcept {
             jet_partitioner::matrix_t mtx = jet_partitioner::matrix_t("mtx",
                                                                       n,
                                                                       n,

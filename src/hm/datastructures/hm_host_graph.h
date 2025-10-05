@@ -46,7 +46,7 @@ namespace GPU_HeiProMap {
         JetHostEntries edges_v;
         JetHostValues edges_w;
 
-        explicit HM_HostGraph(const std::string &file_path) {
+        explicit HM_HostGraph(const std::string &file_path) noexcept {
             ScopedTimer _t_allocate("io", "HM_HostGraph", "allocate");
             if (!file_exists(file_path)) {
                 std::cerr << "File " << file_path << " does not exist!" << std::endl;
@@ -114,15 +114,18 @@ namespace GPU_HeiProMap {
                 vertex_weights(u) = w;
                 graph_weight += w;
 
-                while (i < size) {
-                    int v = ints[i++] - 1;
-
-                    // check if edge weights
-                    w = 1;
-                    if (has_e_weights) { w = ints[i++]; }
-                    edges_v(curr_m) = v;
-                    edges_w(curr_m) = w;
-                    curr_m += 1;
+                if (has_e_weights) {
+                    for (; i < size; i += 2) {
+                        edges_v(curr_m) = ints[i] - 1;
+                        edges_w(curr_m) = ints[i + 1];
+                        curr_m += 1;
+                    }
+                } else {
+                    for (; i < size; ++i) {
+                        edges_v(curr_m) = ints[i] - 1;
+                        edges_w(curr_m) = 1;
+                        curr_m += 1;
+                    }
                 }
                 neighborhood(u + 1) = curr_m;
 
