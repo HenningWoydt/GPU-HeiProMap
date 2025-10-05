@@ -110,12 +110,10 @@ namespace GPU_HeiProMap {
                 std::cout << "Level  " << level << " " << device_graphs.back().n << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
             }
 
-            TIME("io", "io", "write_partition",
-                 HostPartition host_partition = HostPartition("host_partition", device_graphs.back().n);
-                 Kokkos::deep_copy(host_partition, p_manager.partition);
+            HostPartition host_partition = HostPartition("host_partition", device_graphs.back().n);
+            Kokkos::deep_copy(host_partition, p_manager.partition);
 
-                 write_partition(host_partition, device_graphs.back().n, config.mapping_out);
-            );
+            write_partition(host_partition, device_graphs.back().n, config.mapping_out);
 
             std::string config_JSON = config.to_JSON();
             std::string profile_JSON = Profiler::instance().to_JSON();
@@ -144,9 +142,7 @@ namespace GPU_HeiProMap {
 
     private:
         void io() {
-            TIME("io", "HostGraph", "load",
-                 host_g = HostGraph(config.graph_in);
-            );
+            host_g = HostGraph(config.graph_in);
         }
 
         void initialize() {

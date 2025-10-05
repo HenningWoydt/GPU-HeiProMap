@@ -33,8 +33,6 @@
 #include <algorithm>
 #include <chrono>
 #include <sstream>
-#include <cstdio>
-#include <cstdlib>
 
 #include "util.h"
 
@@ -48,12 +46,12 @@ namespace GPU_HeiProMap {
         double total_ms = 0.0;
         unsigned long calls = 0;
 
-        inline void add(double ms) {
+        void add(double ms) {
             total_ms += ms;
             ++calls;
         }
 
-        inline double avg() const { return calls ? total_ms / (f64) calls : 0.0; }
+        double avg() const { return calls ? total_ms / (f64) calls : 0.0; }
     };
 
     struct KTKernels {
@@ -84,74 +82,11 @@ namespace GPU_HeiProMap {
             total_.add(ms);
         }
 
-        // --------- Pretty print (sorted by total time desc at each level) ----------
-        void print(FILE *out = stderr) const {
-#if !ENABLE_PROFILER
-            return;
-#endif
-            auto pct = [](double part, double whole) -> double {
-                return (whole > 0.0) ? (part * 100.0 / whole) : 0.0;
-            };
-
-            std::fprintf(out, "\n=== Kernel Timing (group → function → kernel) ===\n");
-            std::fprintf(out, "%-50s %10s %12s %12s %8s %8s\n",
-                         "Name", "Calls", "Total(ms)", "Avg(ms)", "%Func", "%Group");
-
-            // Sort groups by total time
-            std::vector<std::pair<std::string, KTGroup const *> > gs;
-            gs.reserve(groups_.size());
-            for (auto &kv: groups_) gs.emplace_back(kv.first, &kv.second);
-            std::sort(gs.begin(), gs.end(),
-                      [](auto &a, auto &b) { return a.second->agg.total_ms > b.second->agg.total_ms; });
-
-            for (auto &[gname, gptr]: gs) {
-                const auto &g = *gptr;
-                // Group header
-                std::fprintf(out, "%-50s %10lu %12.3f %12.3f %8s %8.1f\n",
-                             gname.c_str(), g.agg.calls, g.agg.total_ms, g.agg.avg(),
-                             "", pct(g.agg.total_ms, total_.total_ms));
-
-                // Sort functions by total time
-                std::vector<std::pair<std::string, KTKernels const *> > fs;
-                fs.reserve(g.functions.size());
-                for (auto &fk: g.functions) fs.emplace_back(fk.first, &fk.second);
-                std::sort(fs.begin(), fs.end(),
-                          [](auto &a, auto &b) { return a.second->agg.total_ms > b.second->agg.total_ms; });
-
-                for (auto &[fname, fptr]: fs) {
-                    const auto &f = *fptr;
-                    // Function row (1-tab indent)
-                    std::fprintf(out, "    %-46s %10lu %12.3f %12.3f %8s %8.1f\n",
-                                 fname.c_str(), f.agg.calls, f.agg.total_ms, f.agg.avg(),
-                                 "", pct(f.agg.total_ms, g.agg.total_ms));
-
-                    // Sort kernels by total time
-                    std::vector<std::pair<std::string, KTStat const *> > ks;
-                    ks.reserve(f.kernels.size());
-                    for (auto &kk: f.kernels) ks.emplace_back(kk.first, &kk.second);
-                    std::sort(ks.begin(), ks.end(),
-                              [](auto &a, auto &b) { return a.second->total_ms > b.second->total_ms; });
-
-                    for (auto &[kname, kstat]: ks) {
-                        // Kernel row (2-tab indent)
-                        std::fprintf(out, "        %-42s %10lu %12.3f %12.3f %8.1f %8.1f\n",
-                                     kname.c_str(), kstat->calls, kstat->total_ms, kstat->avg(),
-                                     pct(kstat->total_ms, f.agg.total_ms),
-                                     pct(kstat->total_ms, g.agg.total_ms));
-                    }
-                }
-                std::fprintf(out, "\n"); // blank line after each group
-            }
-
-            // Total row at end
-            std::fprintf(out, "-------------------------------------------------\n");
-            std::fprintf(out, "%-50s %10lu %12.3f %12.3f %8s %8s\n",
-                         "TOTAL", total_.calls, total_.total_ms, total_.avg(), "", "100.0");
-            std::fprintf(out, "=================================================\n");
-        }
-
         // --------- JSON export (nested, pretty-printed) ----------
         std::string to_JSON() const {
+#if !ENABLE_PROFILER
+            return "{}";
+#endif
             auto esc = [](const std::string &s) {
                 std::ostringstream e;
                 for (char c: s) {
@@ -290,22 +225,36 @@ namespace GPU_HeiProMap {
         KTStat total_;
     };
 
-    // ===== Convenience macro =====
-    // Helper macros to concatenate tokens safely
-#define CONCAT_IMPL(x, y) x##y
-#define CONCAT(x, y) CONCAT_IMPL(x, y)
-
-    // Pick a unique name per call using __LINE__
-#define UNIQUE_NAME(base) CONCAT(base, __LINE__)
-
+    struct ScopedTimer {
 #if ENABLE_PROFILER
-#define TIME(group, function, kernel, kernel_stmt) \
-        std::chrono::time_point<std::chrono::system_clock> UNIQUE_NAME(_p) = get_time_point(); \
-        kernel_stmt; \
-        Profiler::instance().add(group, function, kernel, get_milli_seconds(UNIQUE_NAME(_p), get_time_point()));
-#else
-#define TIME(group, function, kernel, kernel_stmt) kernel_stmt
+        const char *group;
+        const char *function;
+        const char *kernel;
+        std::chrono::time_point<std::chrono::system_clock> t0;
+        bool stopped = false;
 #endif
+
+        ScopedTimer(const char *g, const char *f, const char *k) {
+#if ENABLE_PROFILER
+            group = g;
+            function = f;
+            kernel = k;
+            t0 = get_time_point();
+            stopped = false;
+#endif
+        }
+
+        void stop() {
+#if ENABLE_PROFILER
+            if (!stopped) {
+                Profiler::instance().add(group, function, kernel, get_milli_seconds(t0, get_time_point()));
+                stopped = true;
+            }
+#endif
+        }
+
+        ~ScopedTimer() { stop(); }
+    };
 } // namespace GPU_HeiProMap
 
 #endif // GPU_HEIPROMAP_PROFILER_H

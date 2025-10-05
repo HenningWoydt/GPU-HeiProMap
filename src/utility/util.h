@@ -128,7 +128,7 @@ namespace GPU_HeiProMap {
     }
 
     inline size_t str_to_ints(const std::string &str,
-                            std::vector<int> &ints) {
+                              std::vector<int> &ints) {
         size_t idx = 0;
         int curr_number = 0;
 
@@ -149,7 +149,7 @@ namespace GPU_HeiProMap {
     }
 
     inline size_t str_to_ints(const std::string &str,
-                            std::vector<vertex_t> &ints) {
+                              std::vector<vertex_t> &ints) {
         size_t idx = 0;
         vertex_t curr_number = 0;
 
@@ -315,224 +315,98 @@ namespace GPU_HeiProMap {
         return p;
     }
 
-    inline void write_partition(const std::vector<partition_t> &partition, const std::string &file_path) {
-        std::ofstream out(file_path, std::ios::binary); // Open file in binary mode for faster writing
-        if (!out.is_open()) {
-            std::cerr << "Error: Could not open " << file_path << " to write partition!" << std::endl;
-            return;
-        }
-
-        // Write each partition element directly to the file, separating them by newlines
-        for (const auto &i: partition) {
-            out << i << '\n'; // Write each element followed by a newline
-        }
-
-        out.close();
-    }
-
-    inline void write_partition_slow(const HostPartition &partition, vertex_t n, const std::string &file_path) {
-        std::ofstream out(file_path, std::ios::binary); // Open file in binary mode for faster writing
-        if (!out.is_open()) {
-            std::cerr << "Error: Could not open " << file_path << " to write partition!" << std::endl;
-            return;
-        }
-
-        // Write each partition element directly to the file, separating them by newlines
-        for (vertex_t u = 0; u < n; ++u) {
-            out << partition(u) << '\n'; // Write each element followed by a newline
-        }
-
-        out.close();
-    }
-
     inline void write_partition(const HostPartition &partition,
                                 vertex_t n,
                                 const std::string &file_path) {
-        std::ofstream out(file_path, std::ios::binary);
+        // Open with truncation and binary (ensures '\n' is not translated on Windows).
+        std::ofstream out(file_path, std::ios::binary | std::ios::out | std::ios::trunc);
         if (!out) {
             std::cerr << "Error: Could not open " << file_path << " to write partition!\n";
             return;
         }
 
-        // 1) Enlarge the stream's internal buffer (optional but helps).
-        std::vector<char> stream_buf(1 << 20); // 1 MB
-        out.rdbuf()->pubsetbuf(stream_buf.data(), stream_buf.size());
+        // Give the stream a big backing buffer (64 MiB).
+        std::vector<char> stream_buf(32u << 21);
+        out.rdbuf()->pubsetbuf(stream_buf.data(), static_cast<long>(stream_buf.size()));
 
-        // 2) Our own aggregation buffer for batched writes.
-        std::string buf;
-        buf.reserve(1 << 20); // 1 MB; tune as needed
+        // Our own aggregation buffer: write directly into it with to_chars.
+        // 8–32 MiB is usually a sweet spot; tune for your IO.
+        constexpr size_t kBufSize = 8u << 20; // 8 MiB
+        std::vector<char> buf(kBufSize);
+        char *const base = buf.data();
+        char *const end = base + buf.size();
+        char *p = base;
 
         for (vertex_t u = 0; u < n; ++u) {
-            // Convert integer to text without iostream overhead.
-            char tmp[32]; // enough for signed 64-bit
-            auto val = partition(u);
-            auto res = std::to_chars(std::begin(tmp), std::end(tmp), val);
-            if (res.ec != std::errc{}) {
-                std::cerr << "Error: to_chars failed while writing.\n";
-                return;
+            // Ensure there’s space for the largest possible integer + '\n'.
+            // Signed 64-bit needs at most 20 digits + optional '-' + '\n' = 22.
+            if (end - p < 32) {
+                out.write(base, static_cast<std::streamsize>(p - base));
+                p = const_cast<char *>(base);
             }
-            const size_t len = static_cast<size_t>(res.ptr - tmp);
 
-            // Flush our buffer if adding this line would overflow capacity.
-            if (buf.size() + len + 1 > buf.capacity()) {
-                out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
-                buf.clear();
-            }
-            buf.append(tmp, len);
-            buf.push_back('\n');
+            auto val = partition(u);
+
+            // Convert directly into the output buffer.
+            auto rc = std::to_chars(p, end - 1, val); // leave room for '\n'
+            // For integral types, this cannot fail if there is buffer space.
+            // Keep a debug assert but no runtime branch in release.
+            assert(rc.ec == std::errc{});
+            p = rc.ptr;
+            *p++ = '\n';
         }
 
-        if (!buf.empty())
-            out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
-
-        out.flush(); // optional
+        // Flush any remainder.
+        if (p != base) {
+            out.write(base, static_cast<std::streamsize>(p - base));
+        }
     }
 
     inline void write_partition(const JetHostPartition &partition,
-                                vertex_t n,
+                                size_t n,
                                 const std::string &file_path) {
-        std::ofstream out(file_path, std::ios::binary);
+        // Open with truncation and binary (ensures '\n' is not translated on Windows).
+        std::ofstream out(file_path, std::ios::binary | std::ios::out | std::ios::trunc);
         if (!out) {
             std::cerr << "Error: Could not open " << file_path << " to write partition!\n";
             return;
         }
 
-        // 1) Enlarge the stream's internal buffer (optional but helps).
-        std::vector<char> stream_buf(1 << 20); // 1 MB
-        out.rdbuf()->pubsetbuf(stream_buf.data(), stream_buf.size());
+        // Give the stream a big backing buffer (64 MiB).
+        std::vector<char> stream_buf(32u << 21);
+        out.rdbuf()->pubsetbuf(stream_buf.data(), static_cast<long>(stream_buf.size()));
 
-        // 2) Our own aggregation buffer for batched writes.
-        std::string buf;
-        buf.reserve(1 << 20); // 1 MB; tune as needed
+        // Our own aggregation buffer: write directly into it with to_chars.
+        // 8–32 MiB is usually a sweet spot; tune for your IO.
+        constexpr size_t kBufSize = 8u << 20; // 8 MiB
+        std::vector<char> buf(kBufSize);
+        char *const base = buf.data();
+        char *const end = base + buf.size();
+        char *p = base;
 
         for (vertex_t u = 0; u < n; ++u) {
-            // Convert integer to text without iostream overhead.
-            char tmp[32]; // enough for signed 64-bit
+            // Ensure there’s space for the largest possible integer + '\n'.
+            // Signed 64-bit needs at most 20 digits + optional '-' + '\n' = 22.
+            if (end - p < 32) {
+                out.write(base, static_cast<std::streamsize>(p - base));
+                p = const_cast<char *>(base);
+            }
+
             auto val = partition(u);
-            auto res = std::to_chars(std::begin(tmp), std::end(tmp), val);
-            if (res.ec != std::errc{}) {
-                std::cerr << "Error: to_chars failed while writing.\n";
-                return;
-            }
-            const size_t len = static_cast<size_t>(res.ptr - tmp);
 
-            // Flush our buffer if adding this line would overflow capacity.
-            if (buf.size() + len + 1 > buf.capacity()) {
-                out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
-                buf.clear();
-            }
-            buf.append(tmp, len);
-            buf.push_back('\n');
+            // Convert directly into the output buffer.
+            auto rc = std::to_chars(p, end - 1, val); // leave room for '\n'
+            // For integral types, this cannot fail if there is buffer space.
+            // Keep a debug assert but no runtime branch in release.
+            assert(rc.ec == std::errc{});
+            p = rc.ptr;
+            *p++ = '\n';
         }
 
-        if (!buf.empty())
-            out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
-
-        out.flush(); // optional
-    }
-
-    inline void write_partition(const std::vector<int> &partition,
-                                const std::string &file_path) {
-        vertex_t n = (vertex_t) partition.size();
-        std::ofstream out(file_path, std::ios::binary);
-        if (!out) {
-            std::cerr << "Error: Could not open " << file_path << " to write partition!\n";
-            return;
+        // Flush any remainder.
+        if (p != base) {
+            out.write(base, static_cast<std::streamsize>(p - base));
         }
-
-        // 1) Enlarge the stream's internal buffer (optional but helps).
-        std::vector<char> stream_buf(1 << 20); // 1 MB
-        out.rdbuf()->pubsetbuf(stream_buf.data(), stream_buf.size());
-
-        // 2) Our own aggregation buffer for batched writes.
-        std::string buf;
-        buf.reserve(1 << 20); // 1 MB; tune as needed
-
-        for (vertex_t u = 0; u < n; ++u) {
-            // Convert integer to text without iostream overhead.
-            char tmp[32]; // enough for signed 64-bit
-            auto val = partition[u];
-            auto res = std::to_chars(std::begin(tmp), std::end(tmp), val);
-            if (res.ec != std::errc{}) {
-                std::cerr << "Error: to_chars failed while writing.\n";
-                return;
-            }
-            const size_t len = static_cast<size_t>(res.ptr - tmp);
-
-            // Flush our buffer if adding this line would overflow capacity.
-            if (buf.size() + len + 1 > buf.capacity()) {
-                out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
-                buf.clear();
-            }
-            buf.append(tmp, len);
-            buf.push_back('\n');
-        }
-
-        if (!buf.empty())
-            out.write(buf.data(), static_cast<std::streamsize>(buf.size()));
-
-        out.flush(); // optional
-    }
-
-    template<class View>
-    KOKKOS_INLINE_FUNCTION
-    size_t view_bytes(const View &v) {
-        using T = typename View::value_type;
-        // span() is the allocated number of elements (safe even if extents are 0)
-        return v.span() * sizeof(T);
-    }
-
-    template<class View>
-    double view_megabytes(const View &v) {
-        return static_cast<double>(view_bytes(v)) / (1024.0 * 1024.0);
-    }
-
-    template<typename T>
-    u64 count_occurrences(Kokkos::View<T *, DeviceMemorySpace> &view,
-                          T needle) {
-        u64 result = 0;
-        Kokkos::parallel_reduce("count_occurrences", view.size(), KOKKOS_LAMBDA(const u64 i, u64 &local) {
-                                    if (view(i) == needle) local += 1ULL;
-                                },
-                                result);
-        Kokkos::fence();
-        return result;
-    }
-
-    template<typename T>
-    u64 count_neq_occurrences(Kokkos::View<T *, DeviceMemorySpace> &view,
-                              T needle) {
-        u64 result = 0;
-        Kokkos::parallel_reduce("count_occurrences", view.size(), KOKKOS_LAMBDA(const u64 i, u64 &local) {
-                                    if (view(i) != needle) local += 1ULL;
-                                },
-                                result);
-        Kokkos::fence();
-        return result;
-    }
-
-    template<typename T>
-    u64 greater_occurrences(Kokkos::View<T *, DeviceMemorySpace> &view,
-                            T needle) {
-        u64 result = 0;
-        Kokkos::parallel_reduce("count_occurrences", view.size(), KOKKOS_LAMBDA(const u64 i, u64 &local) {
-                                    if (view(i) > needle) local += 1ULL;
-                                },
-                                result);
-        Kokkos::fence();
-        return result;
-    }
-
-    template<typename T>
-    u64 smaller_occurrences(Kokkos::View<T *, DeviceMemorySpace> &view,
-                            T needle) {
-        u64 result = 0;
-        Kokkos::parallel_reduce("count_occurrences", view.size(), KOKKOS_LAMBDA(const u64 i, u64 &local) {
-                                    if (view(i) < needle) local += 1ULL;
-                                },
-                                result);
-        Kokkos::fence();
-        return result;
     }
 }
 

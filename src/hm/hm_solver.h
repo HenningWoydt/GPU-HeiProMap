@@ -27,7 +27,6 @@
 #ifndef GPU_HEIPROMAP_HM_SOLVER_H
 #define GPU_HEIPROMAP_HM_SOLVER_H
 
-#include <chrono>
 #include <fstream>
 #include <ostream>
 
@@ -46,17 +45,15 @@ namespace GPU_HeiProMap {
         }
 
         JetHostPartition solve() {
-            TIME("io", "HostGraph", "load",
-                 HM_HostGraph g(config.graph_in);
-            );
+            HM_HostGraph g(config.graph_in);
 
             // solve problem
             JetHostPartition partition = internal_solve(g);
 
             // write output
-            TIME("io", "out", "write_partition",
-            write_partition(partition, g.n, config.mapping_out);
-            );
+            ScopedTimer _t_write("io", "HM_Solver", "write_partition");
+            write_partition(partition, (size_t) g.n, config.mapping_out);
+            _t_write.stop();
 
             std::string config_JSON = config.to_JSON();
             std::string profile_JSON = Profiler::instance().to_JSON();
@@ -68,7 +65,6 @@ namespace GPU_HeiProMap {
             combined_JSON += "}";
 
             std::cout << combined_JSON << std::endl;
-
             // Save to file
             if (config.is_set("--statistics")) {
                 std::ofstream outFile(config.statistics_out);
@@ -84,13 +80,14 @@ namespace GPU_HeiProMap {
         }
 
         JetHostPartition internal_solve(HM_HostGraph &host_g) {
-            JetDevicePartition final_device_partition = JetDevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "final_device_partition"), host_g.n);
-            DeviceScratchMemory scratch_mem(host_g.n, max(config.hierarchy));
+            ScopedTimer _t_allocate("partitioning", "HM_Solver", "allocate");
+            JetHostPartition final_host_partition = JetHostPartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "final_host_partition"), (size_t) host_g.n);
+            JetDevicePartition final_device_partition = JetDevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "final_device_partition"), (size_t) host_g.n);
 
             // references for better code readability
             const int l = (int) config.hierarchy.size();
             std::vector<int> hierarchy((u64) l);
-            for (int i = 0; i < l; ++i) { hierarchy[i] = (int) config.hierarchy[i]; }
+            for (int i = 0; i < l; ++i) { hierarchy[(size_t) i] = (int) config.hierarchy[(size_t) i]; }
 
             std::vector<int> index_vec; // index vector to correctly offset all resulting graphs
             index_vec = {1};
@@ -111,18 +108,18 @@ namespace GPU_HeiProMap {
             const int global_k = (int) config.k;
             const bool use_ultra = config.config == "HM-ultra";
 
+            _t_allocate.stop();
+            ScopedTimer _t_item("partitioning", "HM_Solver", "first_item");
+
             std::vector<HM_Item> stack;
-            JetHostEntries host_o_to_n(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), host_g.n);
-            JetHostEntries host_n_to_o(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), host_g.n);
-            for (int u = 0; u < host_g.n; ++u) {
-                host_o_to_n(u) = u;
-                host_n_to_o(u) = u;
-            }
-            JetDeviceEntries device_o_to_n(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), host_g.n);
-            JetDeviceEntries device_n_to_o(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), host_g.n);
-            Kokkos::deep_copy(device_o_to_n, host_o_to_n);
-            Kokkos::deep_copy(device_n_to_o, host_n_to_o);
+            JetDeviceEntries device_o_to_n(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), (size_t) host_g.n);
+            JetDeviceEntries device_n_to_o(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), (size_t) host_g.n);
+            Kokkos::parallel_for("init_mappings", (size_t) host_g.n, KOKKOS_LAMBDA(int u) {
+                device_o_to_n(u) = u;
+                device_n_to_o(u) = u;
+            });
             Kokkos::fence();
+            _t_item.stop();
 
             stack.push_back({HM_DeviceGraph(host_g), {}, device_o_to_n, device_n_to_o});
 
@@ -132,34 +129,33 @@ namespace GPU_HeiProMap {
 
                 // get depth info
                 const int depth = l - 1 - (int) item.identifier.size();
-                const int local_k = hierarchy[depth];
-                const int local_k_rem = k_rem_vec[depth];
+                const int local_k = hierarchy[(size_t) depth];
+                const int local_k_rem = k_rem_vec[(size_t) depth];
                 const f64 local_imbalance = determine_adaptive_imbalance(global_imbalance, global_g_weight, global_k, item.device_g.graph_weight, local_k_rem, depth + 1);
 
-                JetDevicePartition device_partition = jet_partition(item.device_g, local_k, local_imbalance, config.seed, use_ultra);
+                JetDevicePartition device_partition = jet_partition(item.device_g, local_k, local_imbalance, (int) config.seed, use_ultra);
 
                 if (depth == 0) {
                     // insert solution
-                    TIME("io", "solver", "AssignFinalPartition",
-                         int offset = 0;
-                         for (size_t i = 0; i < item.identifier.size(); ++i) {
-                         offset += item.identifier[i] * index_vec[index_vec.size() - 1 - i];
-                         }
-                         Kokkos::parallel_for("AssignFinalPartition", Kokkos::RangePolicy<>(0, item.device_g.n), KOKKOS_LAMBDA(int u) {
-                             int original_u = item.n_to_o(u);
-                             final_device_partition(original_u) = offset + device_partition(u);
-                             }
-                         );
-                         Kokkos::fence();
-                    );
+                    ScopedTimer _t("partitioning", "HM_Solver", "insert_solution");
+                    int offset = 0;
+                    for (size_t i = 0; i < item.identifier.size(); ++i) { offset += item.identifier[i] * index_vec[index_vec.size() - 1 - i]; }
+
+                    auto n_to_o = item.n_to_o;
+                    Kokkos::parallel_for("insert_solution", (size_t) item.device_g.n, KOKKOS_LAMBDA(const int u) {
+                        const int original_u = n_to_o(u);
+                        final_device_partition(original_u) = offset + device_partition(u);
+                    });
                 } else {
                     // create the subgraphs and place them in the next stack
-                    create_subgraphs(item.device_g, item.n_to_o, local_k, device_partition, item.identifier, host_g.n, stack, scratch_mem);
+                    create_subgraphs(item.device_g, item.n_to_o, local_k, device_partition, item.identifier, host_g.n, stack);
                 }
             }
+            Kokkos::fence();
 
-            JetHostPartition final_host_partition = Kokkos::create_mirror(final_device_partition);
+            ScopedTimer _t("io", "HM_Solver", "download_partition");
             Kokkos::deep_copy(final_host_partition, final_device_partition);
+            Kokkos::fence();
 
             return final_host_partition;
         }

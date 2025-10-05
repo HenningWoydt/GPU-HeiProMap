@@ -125,7 +125,6 @@ namespace GPU_HeiProMap {
 
         // initialize stack;
         std::vector<Item *> stack = {new Item(host_g.n, host_g.n, host_g.m, global_g_weight)}; {
-            TIME("partitioning", "kaffpa_initial_partition", "create_first_graph",
             // create the first graph
             Item *first_graph = stack[0];
 
@@ -159,7 +158,6 @@ namespace GPU_HeiProMap {
             first_graph->imbalance = determine_adaptive_imbalance(global_imbalance, global_g_weight, global_k, first_graph->total_weight, k_rem_vec[l - 1], l);
             first_graph->suppress_output = true;
             first_graph->seed = seed;
-            );
         }
 
         // process the stack
@@ -178,10 +176,8 @@ namespace GPU_HeiProMap {
                         int n = (int) item->n;
                         int nparts = (int) item->nparts;
                         int local_seed = (int) item->seed + i;
-                        TIME("partitioning", "kaffpa_initial_partition", "kaffpa",
-                             kaffpa(&n, item->vwgt, item->xadj, item->adjcwgt, item->adjncy, &nparts, &item->imbalance, item->suppress_output, local_seed, item->mode, &item->edge_cut_temp, item->part_temp);
-                             // kaffpa_balance(&n, item->vwgt, item->xadj, item->adjcwgt, item->adjncy, &nparts, &item->imbalance, false, item->suppress_output, local_seed, item->mode, &item->edge_cut_temp, item->part_temp);
-                        );
+                        kaffpa(&n, item->vwgt, item->xadj, item->adjcwgt, item->adjncy, &nparts, &item->imbalance, item->suppress_output, local_seed, item->mode, &item->edge_cut_temp, item->part_temp);
+                        // kaffpa_balance(&n, item->vwgt, item->xadj, item->adjcwgt, item->adjncy, &nparts, &item->imbalance, false, item->suppress_output, local_seed, item->mode, &item->edge_cut_temp, item->part_temp);
                         if (item->edge_cut_temp < item->edge_cut) {
                             item->edge_cut = item->edge_cut_temp;
                             std::swap(item->part_temp, item->part);
@@ -191,14 +187,11 @@ namespace GPU_HeiProMap {
             }
 
             if (item->identifier.size() == l - 1) {
-                TIME("partitioning", "kaffpa_initial_partition", "insert",
                 // insert solution
                 partition_t offset = 0;
                 for (partition_t i = 0; i < l - 1; ++i) { offset += item->identifier[i] * index_vec[index_vec.size() - 1 - i]; }
                 for (vertex_t u = 0; u < item->n; ++u) { host_partition(item->n_to_o[u]) = offset + (partition_t) item->part[u]; }
-                );
             } else {
-                TIME("partitioning", "kaffpa_initial_partition", "create_subgraphs",
                 // create the subgraphs and place them in the next stack
 
                 // collect the number of vertices and edges for each new subgraph
@@ -280,7 +273,6 @@ namespace GPU_HeiProMap {
                     new_item.suppress_output = true;
                     new_item.seed = seed;
                 }
-                );
             }
             delete item;
         }

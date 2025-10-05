@@ -41,55 +41,51 @@ namespace GPU_HeiProMap {
     inline DistanceOracle initialize_d_oracle(partition_t t_k,
                                               std::vector<partition_t> &t_hierarchy,
                                               std::vector<weight_t> &t_distance) {
-        TIME("io", "initialize_d_oracle", "copy",
-             DistanceOracle d_oracle;
+        DistanceOracle d_oracle;
 
-             d_oracle.k = t_k;
-             d_oracle.w_mtx = DeviceWeight("w_mtx", t_k * t_k);
-             d_oracle.h_mtx = DevicePartition("h_mtx", t_k * t_k);
+        d_oracle.k = t_k;
+        d_oracle.w_mtx = DeviceWeight("w_mtx", t_k * t_k);
+        d_oracle.h_mtx = DevicePartition("h_mtx", t_k * t_k);
 
-             // Copy hierarchy and distances to device views
-             const size_t levels = t_hierarchy.size();
-             HostPartition h_hierarchy("h_hierarchy", levels);
-             HostWeight h_distance("h_distance", levels);
-             for (size_t i = 0; i < levels; ++i) {
-             h_hierarchy(i) = t_hierarchy[i];
-             h_distance(i) = t_distance[i];
-             }
+        // Copy hierarchy and distances to device views
+        const size_t levels = t_hierarchy.size();
+        HostPartition h_hierarchy("h_hierarchy", levels);
+        HostWeight h_distance("h_distance", levels);
+        for (size_t i = 0; i < levels; ++i) {
+            h_hierarchy(i) = t_hierarchy[i];
+            h_distance(i) = t_distance[i];
+        }
 
-             // Copy to device
-             DevicePartition d_hierarchy("d_hierarchy", levels);
-             DeviceWeight d_distance("d_distance", levels);
-             Kokkos::deep_copy(d_hierarchy, h_hierarchy);
-             Kokkos::deep_copy(d_distance, h_distance);
-             Kokkos::fence();
-        );
+        // Copy to device
+        DevicePartition d_hierarchy("d_hierarchy", levels);
+        DeviceWeight d_distance("d_distance", levels);
+        Kokkos::deep_copy(d_hierarchy, h_hierarchy);
+        Kokkos::deep_copy(d_distance, h_distance);
+        Kokkos::fence();
 
-        TIME("io", "initialize_d_oracle", "build_distance_oracle",
-             // Fill w_mtx and h_mtx in parallel
-             Kokkos::parallel_for("build_distance_oracle", t_k * t_k, KOKKOS_LAMBDA(const u32 idx) {
-                 partition_t i = idx / t_k;
-                 partition_t j = idx % t_k;
-                 if (i == j) {
-                 d_oracle.w_mtx(idx) = 0;
-                 d_oracle.h_mtx(idx) = 0;
-                 return;
-                 }
+        // Fill w_mtx and h_mtx in parallel
+        Kokkos::parallel_for("build_distance_oracle", t_k * t_k, KOKKOS_LAMBDA(const u32 idx) {
+            partition_t i = idx / t_k;
+            partition_t j = idx % t_k;
+            if (i == j) {
+                d_oracle.w_mtx(idx) = 0;
+                d_oracle.h_mtx(idx) = 0;
+                return;
+            }
 
-                 partition_t level = 0;
-                 partition_t group_size = 1;
-                 for (; level < levels; ++level) {
-                 group_size *= d_hierarchy(level);
-                 if ((i / group_size) == j / group_size) {
-                 break;
-                 }
-                 }
+            partition_t level = 0;
+            partition_t group_size = 1;
+            for (; level < levels; ++level) {
+                group_size *= d_hierarchy(level);
+                if ((i / group_size) == j / group_size) {
+                    break;
+                }
+            }
 
-                 d_oracle.w_mtx(idx) = d_distance(level);
-                 d_oracle.h_mtx(idx) = level;
-                 });
-             Kokkos::fence();
-        );
+            d_oracle.w_mtx(idx) = d_distance(level);
+            d_oracle.h_mtx(idx) = level;
+        });
+        Kokkos::fence();
 
         return d_oracle;
     }

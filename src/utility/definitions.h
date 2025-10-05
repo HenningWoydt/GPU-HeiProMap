@@ -62,22 +62,22 @@ namespace GPU_HeiProMap {
     typedef s64 weight_t;
     typedef u32 partition_t;
 
-    using HostVertex    = Kokkos::View<vertex_t*, Kokkos::HostSpace>;
-    using HostWeight    = Kokkos::View<weight_t*, Kokkos::HostSpace>;
-    using HostPartition = Kokkos::View<partition_t*, Kokkos::HostSpace>;
-    using HostU8        = Kokkos::View<u8*, Kokkos::HostSpace>;
-    using HostU64       = Kokkos::View<u64*, Kokkos::HostSpace>;
+    using HostVertex = Kokkos::View<vertex_t *, Kokkos::HostSpace>;
+    using HostWeight = Kokkos::View<weight_t *, Kokkos::HostSpace>;
+    using HostPartition = Kokkos::View<partition_t *, Kokkos::HostSpace>;
+    using HostU8 = Kokkos::View<u8 *, Kokkos::HostSpace>;
+    using HostU64 = Kokkos::View<u64 *, Kokkos::HostSpace>;
 
     using DeviceMemorySpace = Kokkos::DefaultExecutionSpace::memory_space;
 
-    using DeviceVertex    = Kokkos::View<vertex_t*, DeviceMemorySpace>;
-    using DeviceWeight    = Kokkos::View<weight_t*, DeviceMemorySpace>;
-    using DevicePartition = Kokkos::View<partition_t*, DeviceMemorySpace>;
-    using DeviceU8        = Kokkos::View<u8*, DeviceMemorySpace>;
-    using DeviceU32       = Kokkos::View<u32*, DeviceMemorySpace>;
-    using DeviceU64       = Kokkos::View<u64*, DeviceMemorySpace>;
-    using DeviceF32       = Kokkos::View<f32*, DeviceMemorySpace>;
-    using DeviceF64       = Kokkos::View<f64*, DeviceMemorySpace>;
+    using DeviceVertex = Kokkos::View<vertex_t *, DeviceMemorySpace>;
+    using DeviceWeight = Kokkos::View<weight_t *, DeviceMemorySpace>;
+    using DevicePartition = Kokkos::View<partition_t *, DeviceMemorySpace>;
+    using DeviceU8 = Kokkos::View<u8 *, DeviceMemorySpace>;
+    using DeviceU32 = Kokkos::View<u32 *, DeviceMemorySpace>;
+    using DeviceU64 = Kokkos::View<u64 *, DeviceMemorySpace>;
+    using DeviceF32 = Kokkos::View<f32 *, DeviceMemorySpace>;
+    using DeviceF64 = Kokkos::View<f64 *, DeviceMemorySpace>;
 }
 
 #endif //GPU_HEIPROMAP_DEFINITIONS_H

@@ -36,13 +36,17 @@
 using namespace GPU_HeiProMap;
 
 int main(int argc, char *argv[]) {
+    ScopedTimer _t_kokkos("io", "Kokkos", "ScopeGuard");
     Kokkos::ScopeGuard guard(argc, argv);
+    _t_kokkos.stop();
 
     if (argc == 1) {
-        Configuration config;
-        config.print_help_message();
+        // Configuration config;
+        // config.print_help_message();
         // return 0;
         {
+            ScopedTimer _t_read_args("io", "Configuration", "read_args");
+
             std::vector<std::pair<std::string, std::string> > input = {
                 {"--graph", "../../graph_collection/mapping/rgg24.graph"}, // SharedMap comm cost 10 243 578
                 {"--mapping", "../data/out/partition/rgg24.txt"},
@@ -77,6 +81,7 @@ int main(int argc, char *argv[]) {
             }
 
             Configuration config(argc_temp, argv_temp);
+            _t_read_args.stop();
 
             if (config.config == "IM") {
                 IM_Solver(config).solve();
@@ -87,11 +92,14 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
             }
 
+            ScopedTimer _t_cleanup("io", "main", "cleanup");
             for (int i = 0; i < argc_temp; ++i) { delete[] argv_temp[i]; }
             delete[] argv_temp;
         }
     } else {
+        ScopedTimer _t_read_args("io", "main", "read_args");
         Configuration config(argc, argv);
+        _t_read_args.stop();
 
         if (config.config == "IM") {
             IM_Solver(config).solve();

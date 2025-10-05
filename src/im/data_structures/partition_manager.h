@@ -43,20 +43,18 @@ namespace GPU_HeiProMap {
     inline PartitionManager initialize_p_manager(const vertex_t t_n,
                                                  const partition_t t_k,
                                                  const weight_t t_lmax) {
-        TIME("io", "initialize_p_manager", "initialize",
-             PartitionManager p_manager;
+        PartitionManager p_manager;
 
-             p_manager.n = t_n;
-             p_manager.k = t_k;
-             p_manager.lmax = t_lmax;
+        p_manager.n = t_n;
+        p_manager.k = t_k;
+        p_manager.lmax = t_lmax;
 
-             p_manager.partition = DevicePartition("partition", t_n);
-             p_manager.bweights = DeviceWeight("b_weights", t_k);
+        p_manager.partition = DevicePartition("partition", t_n);
+        p_manager.bweights = DeviceWeight("b_weights", t_k);
 
-             Kokkos::deep_copy(p_manager.partition, 0);
-             Kokkos::deep_copy(p_manager.bweights, 0);
-             Kokkos::fence();
-        );
+        Kokkos::deep_copy(p_manager.partition, 0);
+        Kokkos::deep_copy(p_manager.bweights, 0);
+        Kokkos::fence();
 
         return p_manager;
     }
@@ -75,62 +73,56 @@ namespace GPU_HeiProMap {
 
     inline void contract(PartitionManager &p_manager,
                          Matching &matching) {
-        TIME("coarsening", "p_manager", "contract",
-             // reset activity
-             DevicePartition temp_device_partition = DevicePartition("partition", p_manager.n);
+        // reset activity
+        DevicePartition temp_device_partition = DevicePartition("partition", p_manager.n);
 
-             Kokkos::parallel_for("initialize", matching.n, KOKKOS_LAMBDA(const vertex_t u) {
-                 if (u == matching.matching(u)) {
-                 vertex_t u_new = matching.o_to_n(u);
-                 temp_device_partition(u_new) = p_manager.partition(u);
-                 }
+        Kokkos::parallel_for("initialize", matching.n, KOKKOS_LAMBDA(const vertex_t u) {
+            if (u == matching.matching(u)) {
+                vertex_t u_new = matching.o_to_n(u);
+                temp_device_partition(u_new) = p_manager.partition(u);
+            }
 
-                 if (u < matching.matching(u)) {
-                 vertex_t u_new = matching.o_to_n(u);
-                 temp_device_partition(u_new) = p_manager.partition(u);
-                 }
-                 });
-             Kokkos::fence();
+            if (u < matching.matching(u)) {
+                vertex_t u_new = matching.o_to_n(u);
+                temp_device_partition(u_new) = p_manager.partition(u);
+            }
+        });
+        Kokkos::fence();
 
-             std::swap(p_manager.partition, temp_device_partition);
-        );
+        std::swap(p_manager.partition, temp_device_partition);
     }
 
     inline void uncontract(PartitionManager &p_manager,
                            Matching &matching) {
-        TIME("uncoarsening", "p_manager", "uncontract",
-             // reset activity
-             DevicePartition temp_device_partition = DevicePartition("device_partition", p_manager.n);
-             Kokkos::parallel_for("initialize", matching.n, KOKKOS_LAMBDA(const vertex_t u) {
-                 vertex_t v = matching.matching(u);
-                 vertex_t u_new = matching.o_to_n(u);
-                 vertex_t v_new = matching.o_to_n(v);
+        // reset activity
+        DevicePartition temp_device_partition = DevicePartition("device_partition", p_manager.n);
+        Kokkos::parallel_for("initialize", matching.n, KOKKOS_LAMBDA(const vertex_t u) {
+            vertex_t v = matching.matching(u);
+            vertex_t u_new = matching.o_to_n(u);
+            vertex_t v_new = matching.o_to_n(v);
 
-                 if (u == v || u < v) {
-                 temp_device_partition(u) = p_manager.partition(u_new);
-                 temp_device_partition(v) = p_manager.partition(v_new);
-                 }
-                 });
-             Kokkos::fence();
+            if (u == v || u < v) {
+                temp_device_partition(u) = p_manager.partition(u_new);
+                temp_device_partition(v) = p_manager.partition(v_new);
+            }
+        });
+        Kokkos::fence();
 
-             std::swap(p_manager.partition, temp_device_partition);
-        );
+        std::swap(p_manager.partition, temp_device_partition);
     }
 
     inline void recalculate_weights(PartitionManager &p_manager,
                                     const Graph &device_g) {
-        TIME("partitioning", "p_manager", "recalculate_weights",
-             // reset weights
-             Kokkos::deep_copy(p_manager.bweights, 0);
-             Kokkos::fence();
+        // reset weights
+        Kokkos::deep_copy(p_manager.bweights, 0);
+        Kokkos::fence();
 
-             // set weights
-             Kokkos::parallel_for("set_block_weights", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
-                 partition_t u_id = p_manager.partition(u);
-                 Kokkos::atomic_add(&p_manager.bweights(u_id), device_g.weights(u));
-                 });
-             Kokkos::fence();
-        );
+        // set weights
+        Kokkos::parallel_for("set_block_weights", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
+            partition_t u_id = p_manager.partition(u);
+            Kokkos::atomic_add(&p_manager.bweights(u_id), device_g.weights(u));
+        });
+        Kokkos::fence();
     }
 
     inline weight_t max_weight(const PartitionManager &p_manager) {

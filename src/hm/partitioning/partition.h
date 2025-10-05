@@ -33,59 +33,10 @@
 namespace GPU_HeiProMap {
     struct HM_Item {
         HM_DeviceGraph device_g;
-        std::vector<int> identifier;
+        std::vector<int> identifier; // host-only container
         JetDeviceEntries o_to_n;
         JetDeviceEntries n_to_o;
     };
-
-    class DeviceScratchMemory {
-    public:
-        Kokkos::View<int *> sub_ns;
-        Kokkos::View<int *> sub_ms;
-        Kokkos::View<int *> sub_weights;
-        Kokkos::View<int *> edge_counts;
-        Kokkos::View<int *> edge_offsets; // +1 for final offset
-        Kokkos::View<int *> vertices_per_id;
-
-        DeviceScratchMemory(int global_n, int max_k) {
-            sub_ns = Kokkos::View<int *>("sub_n", max_k);
-            sub_ms = Kokkos::View<int *>("sub_n", max_k);
-            sub_weights = Kokkos::View<int *>("sub_n", max_k);
-            edge_counts = Kokkos::View<int *>("edge_counts", global_n);
-            edge_offsets = Kokkos::View<int *>("edge_offsets", global_n + 1); // +1 for final offset
-            vertices_per_id = Kokkos::View<int *>("vertices_per_id", global_n * max_k);
-        }
-    };
-
-    inline JetDevicePartition jet_partition_serial(HM_DeviceGraph &device_g,
-                                                   int k,
-                                                   f64 imbalance,
-                                                   int seed,
-                                                   bool use_ultra) {
-        jet_partitioner::config_t config;
-        config.max_imb_ratio = 1.0 + imbalance;
-        config.num_parts = k;
-        config.ultra_settings = use_ultra;
-        config.verbose = false;
-        config.num_iter = 10;
-        config.coarsening_alg = 0;
-
-        jet_partitioner::value_t edge_cut;
-        jet_partitioner::experiment_data<jet_partitioner::value_t> data;
-
-        jet_partitioner::part_mt partition = jet_partitioner::partition_serial(edge_cut,
-                                                                               config,
-                                                                               get_serial_mtx(device_g),
-                                                                               get_serial_vertex_weights(device_g),
-                                                                               false,
-                                                                               data);
-
-        // Allocate and copy to device
-        JetDevicePartition device_partition("device_partition", partition.extent(0));
-        Kokkos::deep_copy(device_partition, partition);
-
-        return device_partition;
-    }
 
     inline JetDevicePartition jet_partition(HM_DeviceGraph &device_g,
                                             int k,
@@ -93,35 +44,36 @@ namespace GPU_HeiProMap {
                                             int seed,
                                             bool use_ultra) {
         if (k == 1) {
-            TIME("partition", "jet", "K=1",
-                 JetDevicePartition partition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "k=1 partition"), device_g.n);
-                 Kokkos::deep_copy(partition, 0);
-                 Kokkos::fence();
-            );
+            ScopedTimer _t("partitioning", "jet_partition", "k=1");
+            JetDevicePartition partition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "k=1 partition"), (size_t) device_g.n);
+            Kokkos::deep_copy(partition, 0);
+            Kokkos::fence();
             return partition;
         }
 
-        TIME("partition", "jet", "partition",
-             jet_partitioner::config_t config;
-             config.max_imb_ratio = 1.0 + imbalance;
-             config.num_parts = k;
-             config.ultra_settings = use_ultra;
-             config.verbose = false;
-             config.num_iter = 10;
-             config.coarsening_alg = 0;
+        jet_partitioner::config_t config;
+        config.max_imb_ratio = 1.0 + imbalance;
+        config.num_parts = k;
+        config.ultra_settings = use_ultra;
+        config.verbose = false;
+        config.num_iter = 1;
+        config.coarsening_alg = 0;
 
-             jet_partitioner::value_t edge_cut;
-             jet_partitioner::experiment_data<jet_partitioner::value_t> data;
+        jet_partitioner::value_t edge_cut;
+        jet_partitioner::experiment_data<jet_partitioner::value_t> data;
 
-             jet_partitioner::matrix_t mtx = device_g.get_mtx();
-             JetDevicePartition partition = jet_partitioner::partition(edge_cut,
-                 config,
-                 mtx,
-                 device_g.vertex_weights,
-                 false,
-                 data);
-             Kokkos::fence();
-        );
+        ScopedTimer _t_mtx("partitioning", "jet_partition", "get_mtx");
+        jet_partitioner::matrix_t mtx = device_g.get_mtx();
+        _t_mtx.stop();
+
+        ScopedTimer _t("partitioning", "jet_partition", "k>1");
+        JetDevicePartition partition = jet_partitioner::partition(edge_cut,
+                                                                  config,
+                                                                  mtx,
+                                                                  device_g.vertex_weights,
+                                                                  false,
+                                                                  data);
+        Kokkos::fence();
 
         return partition;
     }
@@ -138,338 +90,107 @@ namespace GPU_HeiProMap {
         return local_imbalance;
     }
 
-    inline void create_one_subgraph_host(HM_DeviceGraph &device_g,
-                                         JetDeviceEntries &n_to_o, // maps local to global
-                                         int id, // target partition
-                                         JetDevicePartition &device_partition,
-                                         std::vector<int> &identifier,
-                                         int global_n,
-                                         std::vector<HM_Item> &stack) {
-        // Copy the device to the host
-        HM_HostGraph host_g = convert(device_g);
+    inline void create_subgraphs(const HM_DeviceGraph &device_g,
+                                 const JetDeviceEntries &n_to_o, // map local->original for current graph
+                                 const int k,
+                                 const jet_partitioner::part_vt &device_partition,
+                                 const std::vector<int> &identifier,
+                                 const int global_n,
+                                 std::vector<HM_Item> &stack) {
+        stack.reserve(stack.size() + (size_t) k);
 
-        JetHostPartition host_partition = Kokkos::create_mirror_view(device_partition);
-        Kokkos::deep_copy(host_partition, device_partition);
+        std::vector<int> sub_ns((size_t) k, 0);
+        std::vector<int> sub_ms((size_t) k, 0);
+        std::vector<int> sub_ws((size_t) k, 0);
 
-        JetHostEntries host_n_to_o = Kokkos::create_mirror_view(n_to_o);
-        Kokkos::deep_copy(host_n_to_o, n_to_o);
-        Kokkos::fence();
+        ScopedTimer _t("partitioning", "create_subgraphs", "get_n_m_weight");
+        for (int id = 0; id < k; ++id) {
+            Kokkos::parallel_reduce("SubN", (size_t) device_g.n, KOKKOS_LAMBDA(const int u, int &lsum) {
+                if (device_partition(u) == id) lsum += 1;
+            }, sub_ns[(size_t) id]);
 
-        int n = host_g.n;
+            Kokkos::parallel_reduce("SubWeight", (size_t) device_g.n, KOKKOS_LAMBDA(const int u, int &lsum) {
+                if (device_partition(u) == id) lsum += device_g.vertex_weights(u);
+            }, sub_ws[(size_t) id]);
 
-        // first pass, count the number of new vertices, edges and the new graph weight
-        int sub_n = 0, sub_m = 0, sub_weight = 0;
-        for (int u = 0; u < n; ++u) {
-            if (host_partition(u) != id) { continue; }
-
-            sub_n += 1;
-            sub_weight += host_g.vertex_weights(u);
-
-            for (int i = host_g.neighborhood(u); i < host_g.neighborhood(u + 1); ++i) {
-                int v = host_g.edges_v(i);
-                if (device_partition(v) == id) { sub_m++; }
-            }
-        }
-
-        // second pass, build translation table
-        JetHostEntries o_to_n_sub = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), global_n);
-        JetHostEntries n_to_o_sub = JetHostEntries(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), sub_n);
-
-        int counter = 0;
-        for (int u = 0; u < n; ++u) {
-            if (host_partition(u) != id) { continue; }
-            int old_u = host_n_to_o(u);
-            int new_u = counter;
-
-            o_to_n_sub(old_u) = new_u;
-            n_to_o_sub(new_u) = old_u;
-
-            counter += 1;
-        }
-
-        // third pass, build the graph
-        HM_HostGraph host_sub_g(sub_n, sub_m, sub_weight);
-        host_sub_g.neighborhood(0) = 0;
-
-        int idx = 0;
-        for (int u = 0; u < n; ++u) {
-            if (host_partition(u) != id) { continue; }
-
-            int sub_u = o_to_n_sub(n_to_o(u));
-
-            // get the weight
-            host_sub_g.vertex_weights(sub_u) = host_g.vertex_weights(u);
-
-            // fill in edges
-            for (int i = host_g.neighborhood(u); i < host_g.neighborhood(u + 1); ++i) {
-                int v = host_g.edges_v(i);
-                int w = host_g.edges_w(i);
-                if (device_partition(v) == id) {
-                    int sub_v = o_to_n_sub(n_to_o(v));
-
-                    host_sub_g.edges_v(idx) = sub_v;
-                    host_sub_g.edges_w(idx) = w;
-                    idx += 1;
+            Kokkos::parallel_reduce("SubM", (size_t) device_g.n, KOKKOS_LAMBDA(const int u, int &lsum) {
+                if (device_partition(u) == id) {
+                    int cnt = 0;
+                    for (int i = device_g.neighborhood(u); i < device_g.neighborhood(u + 1); ++i) {
+                        const int v = device_g.edges_v(i);
+                        if (device_partition(v) == id) ++cnt;
+                    }
+                    lsum += cnt;
                 }
-            }
-            host_sub_g.neighborhood(sub_u + 1) = idx;
+            }, sub_ms[(size_t) id]);
         }
-
-        // upload from host to device
-        HM_DeviceGraph device_sub_g(host_sub_g);
-
-        JetDeviceEntries device_n_to_o_sub(Kokkos::view_alloc(Kokkos::WithoutInitializing, "device_n_to_o"), n_to_o_sub.extent(0));
-        Kokkos::deep_copy(device_n_to_o_sub, n_to_o_sub);
-
-        JetDeviceEntries device_o_to_n_sub(Kokkos::view_alloc(Kokkos::WithoutInitializing, "device_o_to_n"), o_to_n_sub.extent(0));
-        Kokkos::deep_copy(device_o_to_n_sub, o_to_n_sub);
         Kokkos::fence();
-
-        // add to stack
-        stack.push_back({
-            device_sub_g,
-            identifier,
-            device_o_to_n_sub,
-            device_n_to_o_sub
-        });
-        stack.back().identifier.push_back(id);
-    }
-
-    inline void create_one_subgraph_device(HM_DeviceGraph &device_g,
-                                           JetDeviceEntries &n_to_o, // maps local to global
-                                           int id, // target partition
-                                           JetDevicePartition &device_partition,
-                                           std::vector<int> &identifier,
-                                           int global_n,
-                                           std::vector<HM_Item> &stack,
-                                           DeviceScratchMemory &device_scratch_mem) {
-        int n = device_g.n;
-
-        // Assuming device_partition, vertex_weights, neighborhood, and edges_v are Kokkos::Views
-        int sub_n = 0, sub_m = 0, sub_weight = 0;
-        Kokkos::parallel_reduce("CountSubgraph", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const int u, int &local_n, int &local_m, int &local_weight) {
-                                    if (device_partition(u) != id) {
-                                        device_scratch_mem.edge_counts(u) = 0;
-                                        return;
-                                    }
-
-                                    local_n += 1;
-                                    local_weight += device_g.vertex_weights(u);
-
-                                    int count = 0;
-                                    for (int i = device_g.neighborhood(u); i < device_g.neighborhood(u + 1); ++i) {
-                                        int v = device_g.edges_v(i);
-                                        if (device_partition(v) == id) {
-                                            local_m += 1;
-                                            count += 1;
-                                        }
-                                    }
-                                    device_scratch_mem.edge_counts(u) = count;
-                                },
-                                sub_n, sub_m, sub_weight
-        );
-
-        // second pass, build translation table
-        JetDeviceEntries o_to_n_sub = JetDeviceEntries("o_to_n", global_n);
-        JetDeviceEntries n_to_o_sub = JetDeviceEntries("n_to_o", sub_n);
-
-        Kokkos::View<int *> new_indices("new_indices", n);
-        Kokkos::parallel_scan("PrefixSum", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(int u, int &update, const bool final) {
-            if (final) {
-                new_indices(u) = update;
-            }
-            update += device_partition(u) == id;
-        });
-
-        Kokkos::parallel_for("BuildTranslationTables", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(int u) {
-            if (device_partition(u) != id) return;
-
-            int old_u = n_to_o(u);
-            int new_u = new_indices(u);
-
-            o_to_n_sub(old_u) = new_u;
-            n_to_o_sub(new_u) = old_u;
-        });
-
-        // third pass, build the graph
-        Kokkos::parallel_scan("EdgeOffsetScan", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(const int i, int &update, const bool final) {
-            if (final) {
-                device_scratch_mem.edge_offsets(i) = update;
-            }
-            update += device_scratch_mem.edge_counts(i);
-        });
-
-        // Set final offset manually
-        Kokkos::parallel_for("FinalEdgeOffset", Kokkos::RangePolicy<>(n, n + 1), KOKKOS_LAMBDA(int i) {
-            device_scratch_mem.edge_offsets(i) = device_scratch_mem.edge_offsets(i - 1) + device_scratch_mem.edge_counts(i - 1);
-        });
-
-
-        HM_DeviceGraph device_sub_g(sub_n, sub_m, sub_weight);
-
-        Kokkos::parallel_for("BuildSubgraph", Kokkos::RangePolicy<>(0, n), KOKKOS_LAMBDA(int u) {
-            if (device_partition(u) != id) return;
-
-            int sub_u = o_to_n_sub(n_to_o(u));
-            device_sub_g.vertex_weights(sub_u) = device_g.vertex_weights(u);
-
-            int write_idx = device_scratch_mem.edge_offsets(u);
-            for (int i = device_g.neighborhood(u); i < device_g.neighborhood(u + 1); ++i) {
-                int v = device_g.edges_v(i);
-                int w = device_g.edges_w(i);
-                if (device_partition(v) == id) {
-                    int sub_v = o_to_n_sub(n_to_o(v));
-                    device_sub_g.edges_v(write_idx) = sub_v;
-                    device_sub_g.edges_w(write_idx) = w;
-                    write_idx++;
-                }
-            }
-
-            // Store neighborhood offset
-            device_sub_g.neighborhood(sub_u + 1) = device_scratch_mem.edge_offsets(u + 1);
-        });
-
-        // Set neighborhood(0) = 0
-        Kokkos::parallel_for("SetNeighborhoodZero", Kokkos::RangePolicy<>(0, 1), KOKKOS_LAMBDA(int) {
-            device_sub_g.neighborhood(0) = 0;
-        });
-
-
-        // add to stack
-        stack.push_back({device_sub_g, identifier, o_to_n_sub, n_to_o_sub});
-        stack.back().identifier.push_back(id);
-    }
-
-    inline void create_subgraphs_device(HM_DeviceGraph &device_g,
-                                        JetDeviceEntries &n_to_o, // maps local to global
-                                        int k,
-                                        JetDevicePartition &device_partition,
-                                        std::vector<int> &identifier,
-                                        int global_n,
-                                        std::vector<HM_Item> &stack,
-                                        DeviceScratchMemory &device_scratch_mem) {
-        int n = device_g.n;
-
-        TIME("CreateSubgraphs", "create_subgraphs_device", "copy-0",
-             Kokkos::deep_copy(device_scratch_mem.sub_ns, 0);
-             Kokkos::deep_copy(device_scratch_mem.sub_ms, 0);
-             Kokkos::deep_copy(device_scratch_mem.sub_weights, 0);
-             Kokkos::fence();
-        );
-
-        TIME("CreateSubgraphs", "create_subgraphs_device", "CountSubgraphPerPartition",
-             Kokkos::parallel_for("CountSubgraphPerPartition", n, KOKKOS_LAMBDA(int u) {
-                 int id = device_partition(u);
-
-                 int offset = Kokkos::atomic_fetch_inc(&device_scratch_mem.sub_ns(id)); // count number of vertices
-                 device_scratch_mem.vertices_per_id(id * global_n + offset) = u; // save which vertex is in each block
-
-                 Kokkos::atomic_add(&device_scratch_mem.sub_weights(id), device_g.vertex_weights(u)); // sum weight
-
-                 int count = 0; // count number of edges
-                 for (int i = device_g.neighborhood(u); i < device_g.neighborhood(u + 1); ++i) {
-                 int v = device_g.edges_v(i);
-                 if (device_partition(v) == id) {
-                 count += 1;
-                 }
-                 }
-
-                 device_scratch_mem.edge_counts(u) = count;
-                 Kokkos::atomic_add(&device_scratch_mem.sub_ms(id), count); // add edges
-                 });
-             Kokkos::fence();
-        );
+        _t.stop();
 
         for (int id = 0; id < k; ++id) {
-            TIME("CreateSubgraphs", "create_subgraphs_device", "copy-stats",
-                 int sub_n;
-                 int sub_m;
-                 int sub_weight;
-                 Kokkos::deep_copy(sub_n, Kokkos::subview(device_scratch_mem.sub_ns, id));
-                 Kokkos::deep_copy(sub_m, Kokkos::subview(device_scratch_mem.sub_ms, id));
-                 Kokkos::deep_copy(sub_weight, Kokkos::subview(device_scratch_mem.sub_weights, id));
-                 Kokkos::fence();
-            );
+            int sub_n = sub_ns[(size_t) id];
+            int sub_m = sub_ms[(size_t) id];
+            int sub_weight = sub_ws[(size_t) id];
 
-            TIME("CreateSubgraphs", "create_subgraphs_device", "BuildTranslationTables",
-                 // second pass, build translation table
-                 JetDeviceEntries o_to_n_sub = JetDeviceEntries("o_to_n", global_n);
-                 JetDeviceEntries n_to_o_sub = JetDeviceEntries("n_to_o", sub_n);
+            HM_DeviceGraph device_sub_g(sub_n, sub_m, sub_weight);
 
-                 Kokkos::parallel_for("BuildTranslationTables", Kokkos::RangePolicy<>(0, sub_n), KOKKOS_LAMBDA(int idx) {
-                     int u = device_scratch_mem.vertices_per_id(id * global_n + idx);
+            ScopedTimer _t_translate("partitioning", "create_subgraphs", "translate");
+            JetDeviceEntries o_to_n_sub(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), (size_t) global_n);
+            JetDeviceEntries n_to_o_sub(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), (size_t) sub_n);
 
-                     int old_u = n_to_o(u);
-                     int new_u = idx;
+            Kokkos::parallel_scan("AssignLocalIndex", (size_t) device_g.n, KOKKOS_LAMBDA(const int u, int &prefix, const bool final) {
+                if (device_partition(u) == id) {
+                    const int my_idx = prefix; // exclusive prefix
+                    if (final) {
+                        const int old_u = n_to_o(u);
+                        o_to_n_sub(old_u) = my_idx;
+                        n_to_o_sub(my_idx) = old_u;
+                        device_sub_g.vertex_weights(my_idx) = device_g.vertex_weights(u);
+                    }
+                    prefix += 1;
+                }
+            });
+            _t_translate.stop();
 
-                     o_to_n_sub(old_u) = new_u;
-                     n_to_o_sub(new_u) = old_u;
-                     });
-                 Kokkos::fence();
-            );
+            ScopedTimer _t_graph("partitioning", "create_subgraphs", "build_graph");
+            Kokkos::parallel_for("InitNeighborhood0", 1, KOKKOS_LAMBDA(const int) {
+                device_sub_g.neighborhood(0) = 0;
+            });
 
-            TIME("CreateSubgraphs", "create_subgraphs_device", "EdgeOffsetScan",
-                 Kokkos::parallel_scan("EdgeOffsetScan", Kokkos::RangePolicy<>(0, sub_n), KOKKOS_LAMBDA(const int i, int &update, const bool final) {
-                     int u = device_scratch_mem.vertices_per_id(id * global_n + i);
-                     if (final) {
-                     device_scratch_mem.edge_offsets(u) = update; // STORE START
-                     }
-                     update += device_scratch_mem.edge_counts(u);
-                     });
-                 Kokkos::fence();
-            );
+            Kokkos::parallel_scan("FillEdges", (size_t) device_g.n, KOKKOS_LAMBDA(const int u, int &edge_prefix, const bool final) {
+                if (device_partition(u) == id) {
+                    int start = edge_prefix;
+                    int cnt = 0;
 
+                    // Count + (in final phase) write edges for this vertex
+                    for (int i = device_g.neighborhood(u); i < device_g.neighborhood(u + 1); ++i) {
+                        const int v = device_g.edges_v(i);
+                        if (device_partition(v) == id) {
+                            if (final) {
+                                const int sub_v = o_to_n_sub(n_to_o(v));
+                                device_sub_g.edges_v(start) = sub_v;
+                                device_sub_g.edges_w(start) = device_g.edges_w(i);
+                            }
+                            ++start; // advance write cursor for this vertex
+                            ++cnt; // degree in subgraph
+                        }
+                    }
 
-            TIME("CreateSubgraphs", "create_subgraphs_device", "BuildSubgraph",
-                 HM_DeviceGraph device_sub_g(sub_n, sub_m, sub_weight);
+                    if (final) {
+                        const int sub_u = o_to_n_sub(n_to_o(u));
+                        device_sub_g.neighborhood(sub_u + 1) = edge_prefix + cnt; // end offset
+                    }
 
-                 Kokkos::parallel_for("BuildSubgraph", Kokkos::RangePolicy<>(0, sub_n), KOKKOS_LAMBDA(int idx) {
-                     int u = device_scratch_mem.vertices_per_id(id * global_n + idx);
+                    edge_prefix += cnt; // contribute to global (subgraph) edge prefix
+                }
+            });
+            _t_graph.stop();
 
-                     int sub_u = o_to_n_sub(n_to_o(u));
-                     device_sub_g.vertex_weights(sub_u) = device_g.vertex_weights(u);
-
-                     int write_idx = device_scratch_mem.edge_offsets(u);
-                     for (int i = device_g.neighborhood(u); i < device_g.neighborhood(u + 1); ++i) {
-                     int v = device_g.edges_v(i);
-                     int w = device_g.edges_w(i);
-                     if (device_partition(v) == id) {
-                     int sub_v = o_to_n_sub(n_to_o(v));
-                     device_sub_g.edges_v(write_idx) = sub_v;
-                     device_sub_g.edges_w(write_idx) = w;
-                     write_idx++;
-                     }
-                     }
-
-                     // Store neighborhood offset
-                     device_sub_g.neighborhood(sub_u + 1) = write_idx;
-                     });
-                 Kokkos::fence();
-            );
-
-            TIME("CreateSubgraphs", "create_subgraphs_device", "SetNeighborhoodZero",
-                 // Set neighborhood(0) = 0
-                 Kokkos::parallel_for("SetNeighborhoodZero", Kokkos::RangePolicy<>(0, 1), KOKKOS_LAMBDA(int) {
-                     device_sub_g.neighborhood(0) = 0;
-                     });
-                 Kokkos::fence();
-            );
-
-            // add to stack
+            ScopedTimer _t_push("partitioning", "create_subgraphs", "push");
             stack.push_back({device_sub_g, identifier, o_to_n_sub, n_to_o_sub});
             stack.back().identifier.push_back(id);
+            _t_push.stop();
         }
-    }
-
-    inline void create_subgraphs(HM_DeviceGraph &device_g,
-                                 JetDeviceEntries &n_to_o,
-                                 int k,
-                                 jet_partitioner::part_vt &device_partition,
-                                 std::vector<int> &identifier,
-                                 int global_n,
-                                 std::vector<HM_Item> &stack,
-                                 DeviceScratchMemory &device_scratch_mem) {
-        create_subgraphs_device(device_g, n_to_o, k, device_partition, identifier, global_n, stack, device_scratch_mem);
     }
 }
 
