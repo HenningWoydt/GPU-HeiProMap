@@ -24,19 +24,19 @@
  * SOFTWARE.
  ******************************************************************************/
 
-#ifndef GPU_HEIPROMAP_LABEL_PROPAGATION_H
-#define GPU_HEIPROMAP_LABEL_PROPAGATION_H
+#ifndef GPU_HEIPROMAP_JET_LABEL_PROPAGATION_H
+#define GPU_HEIPROMAP_JET_LABEL_PROPAGATION_H
 
 #include "../utility/comm_cost.h"
 #include "../../utility/definitions.h"
-#include "../data_structures/device_graph.h"
+#include "../data_structures/graph.h"
 #include "../data_structures/distance_oracle.h"
 #include "../data_structures/large_vertex_partition_csr.h"
 #include "../data_structures/partition_manager.h"
 #include "../../utility/profiler.h"
 
 namespace GPU_HeiProMap {
-    struct LabelPropagationStruct {
+    struct JetLabelPropagation {
         vertex_t n = 0;
         vertex_t m = 0;
         partition_t k = 0;
@@ -53,7 +53,6 @@ namespace GPU_HeiProMap {
 
         DeviceWeight gain;
         DevicePartition preferred;
-        // DeviceWeight conn;
         DeviceWeight gain2;
         DeviceU32 locked;
         DeviceU32 in_X;
@@ -67,11 +66,13 @@ namespace GPU_HeiProMap {
         DeviceVertex flat_buckets;
     };
 
-    inline LabelPropagationStruct initialize_lp(const vertex_t t_n,
-                                                const vertex_t t_m,
-                                                const partition_t t_k,
-                                                const weight_t t_lmax) {
-        LabelPropagationStruct lp;
+    inline JetLabelPropagation initialize_lp(const vertex_t t_n,
+                                             const vertex_t t_m,
+                                             const partition_t t_k,
+                                             const weight_t t_lmax) {
+        ScopedTimer _t("io", "JetLabelPropagation", "allocate");
+
+        JetLabelPropagation lp;
 
         lp.n = t_n;
         lp.m = t_m;
@@ -80,18 +81,17 @@ namespace GPU_HeiProMap {
         lp.sigma = lp.lmax - (weight_t) ((f64) lp.lmax * lp.sigma_percent);
 
         lp.p_manager = initialize_p_manager(t_n, t_k, t_lmax);
-        lp.gain = DeviceWeight("gain", lp.n);
-        lp.preferred = DevicePartition("preferred", lp.n);
-        // lp.conn = DeviceWeight("conn", lp.n);
-        lp.gain2 = DeviceWeight("gain2", lp.n);
-        lp.locked = DeviceU32("locked", lp.n);
-        lp.in_X = DeviceU32("in_X", lp.n);
-        lp.to_move = DeviceU32("to_move", lp.n);
+        lp.gain = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "gain"), lp.n);
+        lp.preferred = DevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "preferred"), lp.n);
+        lp.gain2 = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "gain2"), lp.n);
+        lp.locked = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "locked"), lp.n);
+        lp.in_X = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "in_X"), lp.n);
+        lp.to_move = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "to_move"), lp.n);
 
-        lp.bucket_counts = DeviceU32("bucket_counts", lp.k * lp.max_slots * lp.rho);
-        lp.bucket_offsets = DeviceU32("bucket_offsets", lp.k * lp.max_slots * lp.rho);
-        lp.bucket_cursor = DeviceU32("bucket_cursor", lp.k * lp.max_slots * lp.rho);
-        lp.flat_buckets = DeviceVertex("flat_buckets", lp.n);
+        lp.bucket_counts = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "bucket_counts"), lp.k * lp.max_slots * lp.rho);
+        lp.bucket_offsets = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "bucket_offsets"), lp.k * lp.max_slots * lp.rho);
+        lp.bucket_cursor = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "bucket_cursor"), lp.k * lp.max_slots * lp.rho);
+        lp.flat_buckets = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "flat_buckets"), lp.n);
         return lp;
     }
 
@@ -132,7 +132,6 @@ namespace GPU_HeiProMap {
 #endif
     }
 
-    // safe abs for s64 -> u64
     KOKKOS_INLINE_FUNCTION
     u64 abs_s64_to_u64(s64 x) {
         return (x >= 0)
@@ -141,7 +140,7 @@ namespace GPU_HeiProMap {
     }
 
     KOKKOS_INLINE_FUNCTION
-    u32 loss_slot(const weight_t gain, const LabelPropagationStruct &lp) {
+    u32 loss_slot(const weight_t gain, const JetLabelPropagation &lp) {
         if (gain > 0) return 0; // best: positive gain
         if (gain == 0) return 1; // tie
 
@@ -150,7 +149,7 @@ namespace GPU_HeiProMap {
     }
 
     KOKKOS_INLINE_FUNCTION
-    u32 loss_slot_decades(weight_t gain, const LabelPropagationStruct &lp) {
+    u32 loss_slot_decades(weight_t gain, const JetLabelPropagation &lp) {
         const u32 S = lp.max_slots;
         if (S < 2u) return 0u; // degenerate safety
         if (gain > 0) return 0u; // positives
@@ -184,17 +183,17 @@ namespace GPU_HeiProMap {
     }
 
     KOKKOS_INLINE_FUNCTION
-    u32 idx_psm(partition_t p, u32 s, u32 m, const LabelPropagationStruct &lp) {
+    u32 idx_psm(partition_t p, u32 s, u32 m, const JetLabelPropagation &lp) {
         return (p * lp.max_slots + s) * lp.rho + m;
     }
 
     KOKKOS_INLINE_FUNCTION
-    u32 idx_dsm(partition_t d, u32 s, u32 m, const LabelPropagationStruct &lp) {
+    u32 idx_dsm(partition_t d, u32 s, u32 m, const JetLabelPropagation &lp) {
         return (d * lp.max_slots + s) * lp.rho + m;
     }
 
     KOKKOS_INLINE_FUNCTION
-    bool ord_smaller(const LabelPropagationStruct &lp, vertex_t u, vertex_t v) {
+    bool ord_smaller(const JetLabelPropagation &lp, vertex_t u, vertex_t v) {
         weight_t gain_u = lp.gain(u);
         weight_t gain_v = lp.gain(v);
 
@@ -216,7 +215,7 @@ namespace GPU_HeiProMap {
         return key % k;
     }
 
-    inline void move(LabelPropagationStruct &lp,
+    inline void move(JetLabelPropagation &lp,
                      Graph &device_g,
                      LargeVertexPartitionCSR &large_csr) {
         move(large_csr, device_g, lp.p_manager, lp.to_move, lp.preferred);
@@ -235,10 +234,12 @@ namespace GPU_HeiProMap {
         Kokkos::fence();
     }
 
-    inline void jetlp(LabelPropagationStruct &lp,
+    inline void jetlp(JetLabelPropagation &lp,
                       Graph &device_g,
                       DistanceOracle &d_oracle,
                       LargeVertexPartitionCSR &csr) {
+        ScopedTimer _t("refine", "JetLabelPropagation", "jetlp");
+
         Kokkos::deep_copy(lp.to_move, 0);
         Kokkos::deep_copy(lp.gain2, -max_sentinel<weight_t>());
         Kokkos::deep_copy(lp.gain, -max_sentinel<weight_t>());
@@ -248,51 +249,46 @@ namespace GPU_HeiProMap {
 
         f64 avg_weight = (f64) device_g.g_weight / (f64) lp.k;
         Kokkos::parallel_for("determine_max_delta", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
-            partition_t old_id = lp.p_manager.partition(u);
+                                 partition_t old_id = lp.p_manager.partition(u);
 
-            if (lp.locked(u) == 1) { return; }
-            if ((f64) device_g.weights(u) > lp.heavy_alpha * ((f64) lp.p_manager.bweights(old_id) - avg_weight)) { return; } // vertex is too heavy
+                                 if (lp.locked(u) == 1) { return; }
+                                 if ((f64) device_g.weights(u) > lp.heavy_alpha * ((f64) lp.p_manager.bweights(old_id) - avg_weight)) { return; } // vertex is too heavy
 
-            const u32 row_begin = csr.row(u);
-            const u32 row_end = csr.row(u + 1);
+                                 const u32 row_begin = csr.row(u);
+                                 const u32 row_end = csr.row(u + 1);
 
-            weight_t best_delta = -max_sentinel<weight_t>();
-            partition_t best_id = lp.k;
-            for (u32 j = row_begin; j < row_end; ++j) {
-                partition_t new_id = csr.ids(j);
-                if (old_id == new_id) {
-                    // lp.conn(u) = csr.weights(j);
-                    continue; // dont move to same partition
-                }
+                                 weight_t best_delta = -max_sentinel<weight_t>();
+                                 partition_t best_id = lp.k;
+                                 for (u32 j = row_begin; j < row_end; ++j) {
+                                     partition_t new_id = csr.ids(j);
+                                     if (old_id == new_id) { continue; }
+                                     if (new_id == lp.k) { continue; }
 
-                if (new_id == lp.k) { continue; }
+                                     weight_t delta = 0;
+                                     for (u32 l = row_begin; l < row_end; ++l) {
+                                         partition_t vv_id = csr.ids(l);
+                                         weight_t w = csr.weights(l);
 
-                weight_t delta = 0;
-                for (u32 l = row_begin; l < row_end; ++l) {
-                    partition_t vv_id = csr.ids(l);
-                    weight_t w = csr.weights(l);
+                                         if (vv_id == lp.k) { continue; }
 
-                    if (vv_id == lp.k) { continue; }
+                                         delta += w * get_diff(d_oracle, old_id, new_id, vv_id);
+                                     }
 
-                    delta += w * get_diff(d_oracle, old_id, new_id, vv_id);
-                }
+                                     if (delta > best_delta) {
+                                         best_delta = delta;
+                                         best_id = new_id;
+                                     }
+                                 }
 
-                if (delta > best_delta) {
-                    best_delta = delta;
-                    best_id = new_id;
-                }
-            }
+                                 if (best_delta >= 0) {
+                                     lp.gain(u) = best_delta;
+                                     lp.preferred(u) = best_id;
 
-            weight_t F = best_delta;
-            bool eligible = F >= 0 || F >= -10;
-            if (eligible) {
-                lp.gain(u) = best_delta;
-                lp.preferred(u) = best_id;
-
-                lp.in_X(u) = 1;
-                lp.gain2(u) = 0;
-            }
-        });
+                                     lp.in_X(u) = 1;
+                                     lp.gain2(u) = 0;
+                                 }
+                             }
+        );
         Kokkos::fence();
 
         Kokkos::parallel_for("afterburner", device_g.m, KOKKOS_LAMBDA(const u32 i) {
@@ -317,7 +313,7 @@ namespace GPU_HeiProMap {
         Kokkos::fence();
 
         Kokkos::parallel_for("nonnegative_filter", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
-            lp.to_move(u) = lp.gain2(u) >= 0 ? 1 : 0;
+            lp.to_move(u) = lp.gain2(u) >= 0;
         });
         Kokkos::fence();
 
@@ -327,10 +323,13 @@ namespace GPU_HeiProMap {
         move(lp, device_g, csr);
     }
 
-    inline void jetrw(LabelPropagationStruct &lp,
+
+    inline void jetrw(JetLabelPropagation &lp,
                       Graph &device_g,
                       DistanceOracle &d_oracle,
                       LargeVertexPartitionCSR &csr) {
+        ScopedTimer _t("refine", "JetLabelPropagation", "jetrw");
+
         Kokkos::deep_copy(lp.bucket_counts, 0);
         Kokkos::deep_copy(lp.to_move, 0);
         Kokkos::deep_copy(lp.bucket_cursor, 0);
@@ -339,8 +338,8 @@ namespace GPU_HeiProMap {
         Kokkos::fence();
 
         partition_t n_destinations = 0;
-        Kokkos::parallel_reduce("count_open_blocks", lp.p_manager.k, KOKKOS_LAMBDA(const partition_t id, u32 &local) {
-                                    local += lp.p_manager.bweights(id) < lp.sigma ? 1u : 0u;
+        Kokkos::parallel_reduce("count_open_blocks", lp.p_manager.k, KOKKOS_LAMBDA(const partition_t id, partition_t &local) {
+                                    local += lp.p_manager.bweights(id) < lp.sigma;
                                 },
                                 n_destinations);
         Kokkos::fence();
@@ -429,6 +428,8 @@ namespace GPU_HeiProMap {
 
         // fill the buckets
         Kokkos::deep_copy(lp.bucket_cursor, lp.bucket_offsets);
+        Kokkos::fence();
+
         Kokkos::parallel_for("fill_buckets", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
             if (lp.preferred(u) == lp.k) { return; } // no move found
 
@@ -459,11 +460,10 @@ namespace GPU_HeiProMap {
                         weight_t wu = device_g.weights(u);
 
                         if (moved < min_to_lose) {
-                            // if (moved + wu <= min_to_lose) {
                             lp.to_move(u) = 1; // mark selection
                             moved += wu;
                         } else {
-                            break; // done for this (p,s,mini); outer loops will exit via moved >= mmax
+                            break;
                         }
                     }
                 }
@@ -474,11 +474,13 @@ namespace GPU_HeiProMap {
         move(lp, device_g, csr);
     }
 
-    inline void jetrs(LabelPropagationStruct &lp,
+    inline void jetrs(JetLabelPropagation &lp,
                       Graph &device_g,
                       DistanceOracle &d_oracle,
                       u32 seed,
                       LargeVertexPartitionCSR &csr) {
+        ScopedTimer _t("refine", "JetLabelPropagation", "jetrs");
+
         Kokkos::deep_copy(lp.bucket_counts, 0);
         Kokkos::deep_copy(lp.to_move, 0);
         Kokkos::deep_copy(lp.gain, -max_sentinel<weight_t>());
@@ -532,34 +534,6 @@ namespace GPU_HeiProMap {
 
             if (lp.p_manager.bweights(u_id) <= lp.lmax) { return; } // u_id not overloaded
             if ((f64) device_g.weights(u) > lp.heavy_alpha * ((f64) lp.p_manager.bweights(u_id) - ((f64) device_g.g_weight / (f64) lp.k))) { return; } // vertex too heavy
-
-            /*
-                 if (u_id == v_id) {
-                 // no partner found, choose a random one
-                 partition_t v_id1 = random_partition(u, seed, 2654435761u, 0x85ebca6bu, lp.k);
-                 partition_t v_id2 = random_partition(u, seed, 2246822519u, 0xc2b2ae35u, lp.k);
-                 partition_t v_id3 = random_partition(u, seed, 3266489917u, 0x27d4eb2fu, lp.k);
-                 partition_t v_id4 = random_partition(u, seed, 668265263u, 0x165667b1u, lp.k);
-                 partition_t v_id5 = random_partition(u, seed, 374761393u, 0xbf58476du, lp.k);
-
-                 if (v_id1 != u_id && lp.p_manager.bweights(v_id1) < lp.lmax) {
-                 v_id = v_id1;
-                 } else if (v_id2 != u_id && lp.p_manager.bweights(v_id2) < lp.lmax) {
-                 v_id = v_id2;
-                 } else if (v_id3 != u_id && lp.p_manager.bweights(v_id3) < lp.lmax) {
-                 v_id = v_id3;
-                 } else if (v_id4 != u_id && lp.p_manager.bweights(v_id4) < lp.lmax) {
-                 v_id = v_id3;
-                 } else if (v_id5 != u_id && lp.p_manager.bweights(v_id5) < lp.lmax) {
-                 v_id = v_id5;
-                 }
-
-                 lp.gain(u) = comm_cost_delta(device_g, lp.p_manager, d_oracle, u, u_id, v_id);
-
-                 lp.preferred(u) = v_id;
-                 }
-                 */
-
             if (u_id == v_id) { return; }
 
             u32 s = loss_slot(lp.gain(u), lp);
@@ -569,12 +543,11 @@ namespace GPU_HeiProMap {
         Kokkos::fence();
 
         // prefix sum
-        Kokkos::parallel_scan("bucket_offsets", lp.k * lp.max_slots * lp.rho,
-                              KOKKOS_LAMBDA(const u32 i, u32 &upd, const bool final_pass) {
-                                  u32 val = lp.bucket_counts(i);
-                                  if (final_pass) lp.bucket_offsets(i) = upd;
-                                  upd += val;
-                              });
+        Kokkos::parallel_scan("bucket_offsets", lp.k * lp.max_slots * lp.rho, KOKKOS_LAMBDA(const u32 i, u32 &upd, const bool final_pass) {
+            u32 val = lp.bucket_counts(i);
+            if (final_pass) lp.bucket_offsets(i) = upd;
+            upd += val;
+        });
         Kokkos::fence();
 
         // fill
@@ -609,17 +582,15 @@ namespace GPU_HeiProMap {
                     for (u32 pos = beg; pos < end && acquired < cap_d; ++pos) {
                         vertex_t u = lp.flat_buckets(pos);
 
-                        // Source must still be overloaded (could have changed if we moved earlier in this kernel, but moves are applied later)
-                        partition_t pu = lp.p_manager.partition(u);
-                        if (lp.p_manager.bweights(pu) <= lp.lmax) continue;
+                        // partition_t pu = lp.p_manager.partition(u);
+                        // if (lp.p_manager.bweights(pu) <= lp.lmax) continue;
 
                         weight_t wu = device_g.weights(u);
                         if (acquired + wu <= cap_d) {
                             lp.to_move(u) = 1;
                             acquired += wu;
                         } else {
-                            // greedy: skip this u if it doesn't fit; continue trying smaller ones (next minibuckets)
-                            // (You could allow slight overfill or try next candidate; here we keep strict ≤ cap)
+                            break;
                         }
                     }
                 }
@@ -630,19 +601,21 @@ namespace GPU_HeiProMap {
         move(lp, device_g, csr);
     }
 
-    inline void refine(LabelPropagationStruct &lp,
+    inline void refine(JetLabelPropagation &lp,
                        Graph &device_g,
                        PartitionManager &p_manager,
                        DistanceOracle &d_oracle,
                        u32 level) {
         copy_into(lp.p_manager, p_manager, device_g.n);
 
+        ScopedTimer _t("refine", "LargeVertexPartitionCSR", "build_scratch");
         LargeVertexPartitionCSR large_csr = rebuild_scratch(device_g, lp.p_manager);
-        // assert_vertex_partition_csr(device_g, lp.p_manager, large_csr);
+        _t.stop();
 
-        // weight_t best_comm_cost = comm_cost(device_g, p_manager, d_oracle);
+        ScopedTimer _t_comm_cost("refine", "JetLabelPropagation", "get_comm_cost");
         weight_t best_comm_cost = comm_cost(device_g, lp.p_manager, large_csr, d_oracle);
         weight_t best_weight = max_weight(lp.p_manager);
+        _t_comm_cost.stop();
 
         weight_t curr_comm_cost = best_comm_cost;
         weight_t curr_weight = best_weight;
@@ -651,10 +624,10 @@ namespace GPU_HeiProMap {
         weight_t last_rw_comm_cost = max_sentinel<weight_t>();
         weight_t last_rw_weight = max_sentinel<weight_t>();
 
+        ScopedTimer _t_reset_lock("refine", "JetLabelPropagation", "reset_lock");
         Kokkos::deep_copy(lp.locked, 0);
         Kokkos::fence();
-
-        // std::cout << "start " << comm_cost(device_g, lp.p_manager, large_csr, d_oracle) << " " << max_weight(lp.p_manager) << " " << lp.lmax << std::endl;
+        _t_reset_lock.stop();
 
         u32 weak_iterations = 0;
         u32 iteration = 0;
@@ -664,29 +637,26 @@ namespace GPU_HeiProMap {
             executed_rw = false;
             if (curr_weight <= lp.lmax) {
                 jetlp(lp, device_g, d_oracle, large_csr);
-                // assert_vertex_partition_csr(device_g, lp.p_manager, large_csr);
-                // std::cout << "lp " << comm_cost(device_g, lp.p_manager, large_csr, d_oracle) << " " << max_weight(lp.p_manager) << " " << lp.lmax << std::endl;
                 weak_iterations = 0;
             } else {
+                ScopedTimer _t_reset_lock2("refine", "JetLabelPropagation", "reset_lock");
                 Kokkos::deep_copy(lp.locked, 0);
                 Kokkos::fence();
+                _t_reset_lock2.stop();
                 if (weak_iterations < lp.max_weak_iterations) {
                     jetrw(lp, device_g, d_oracle, large_csr);
-                    // assert_vertex_partition_csr(device_g, lp.p_manager, large_csr);
-                    // std::cout << "rw " << comm_cost(device_g, lp.p_manager, large_csr, d_oracle) << " " << max_weight(lp.p_manager) << " " << lp.lmax << std::endl;
                     weak_iterations++;
                     executed_rw = true;
                 } else {
                     jetrs(lp, device_g, d_oracle, seed, large_csr);
-                    // assert_vertex_partition_csr(device_g, lp.p_manager, large_csr);
-                    // std::cout << "rs " << comm_cost(device_g, lp.p_manager, large_csr, d_oracle) << " " << max_weight(lp.p_manager) << " " << lp.lmax << std::endl;
                     weak_iterations = 0;
                 }
             }
 
-            curr_weight = max_weight(lp.p_manager);
-            // curr_comm_cost = comm_cost(device_g, lp.p_manager, d_oracle);
+            ScopedTimer _t_comm_cost2("refine", "JetLabelPropagation", "get_comm_cost");
             curr_comm_cost = comm_cost(device_g, lp.p_manager, large_csr, d_oracle);
+            curr_weight = max_weight(lp.p_manager);
+            _t_comm_cost2.stop();
 
             if (executed_rw) {
                 if (curr_comm_cost == last_rw_comm_cost && last_rw_weight == curr_weight) {
@@ -720,4 +690,4 @@ namespace GPU_HeiProMap {
     }
 }
 
-#endif //GPU_HEIPROMAP_LABEL_PROPAGATION_H
+#endif //GPU_HEIPROMAP_JET_LABEL_PROPAGATION_H

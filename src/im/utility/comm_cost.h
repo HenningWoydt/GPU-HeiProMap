@@ -28,7 +28,7 @@
 #define GPU_HEIPROMAP_COMM_COST_H
 
 #include "../../utility/definitions.h"
-#include "../data_structures/device_graph.h"
+#include "../data_structures/graph.h"
 #include "../data_structures/distance_oracle.h"
 #include "../data_structures/large_vertex_partition_csr.h"
 #include "../data_structures/partition_manager.h"

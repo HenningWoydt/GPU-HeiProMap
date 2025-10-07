@@ -63,7 +63,6 @@ namespace GPU_HeiProMap {
             Kokkos::deep_copy(exec, edges_v, host_g.edges_v);
             Kokkos::deep_copy(exec, edges_w, host_g.edges_w);
             exec.fence();
-            // Kokkos::fence();
         }
 
         HM_DeviceGraph(const int t_n, const int t_m, const int t_weight) noexcept {

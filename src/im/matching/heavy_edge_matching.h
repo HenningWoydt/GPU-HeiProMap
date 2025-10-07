@@ -28,7 +28,7 @@
 #define GPU_HEIPROMAP_HEAVY_EDGE_MATCHING_H
 
 #include "../../utility/definitions.h"
-#include "../data_structures/device_graph.h"
+#include "../data_structures/graph.h"
 #include "../data_structures/partition_manager.h"
 #include "../../utility/profiler.h"
 
@@ -120,22 +120,24 @@ namespace GPU_HeiProMap {
 
     inline HeavyEdgeMatcher initialize_hem(const vertex_t t_n,
                                            const weight_t t_lmax) {
+        ScopedTimer _t("io", "HeavyEdgeMatcher", "allocate");
+
         HeavyEdgeMatcher hem;
         hem.n = t_n;
         hem.lmax = t_lmax;
 
-        hem.neighborhood_hash = DeviceU32("neighborhood_hash", t_n);
-        hem.preferred_neighbor = DeviceVertex("preferred_neighbors", t_n);
-        hem.scratch_rating = DeviceF32("scratch_rating", t_n);
-        hem.u64_helper = DeviceU64("u64_helper", t_n);
+        hem.neighborhood_hash = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood_hash"), t_n);
+        hem.preferred_neighbor = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "preferred_neighbors"), t_n);
+        hem.scratch_rating = DeviceF32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "scratch_rating"), t_n);
+        hem.u64_helper = DeviceU64(Kokkos::view_alloc(Kokkos::WithoutInitializing, "u64_helper"), t_n);
 
-        hem.vertex_to_index = DeviceU32("vertex_to_index", t_n);
-        hem.hash_vertex_array = Kokkos::View<HashVertex *>("hash_vertex_array", t_n);
-        hem.index_to_group_id = DeviceU32("index_to_group_id", t_n);
-        hem.is_head = DeviceU32("is_head", t_n);
+        hem.vertex_to_index = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_to_index"), t_n);
+        hem.hash_vertex_array = Kokkos::View<HashVertex *>(Kokkos::view_alloc(Kokkos::WithoutInitializing, "hash_vertex_array"), t_n);
+        hem.index_to_group_id = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "index_to_group_id"), t_n);
+        hem.is_head = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "is_head"), t_n);
 
-        hem.group_n_vertices = DeviceU32("group_n_vertices", t_n + 1);
-        hem.group_begin = DeviceU32("group_begin", t_n + 2);
+        hem.group_n_vertices = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "group_n_vertices"), t_n + 1);
+        hem.group_begin = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "group_begin"), t_n + 2);
         return hem;
     }
 
@@ -143,6 +145,8 @@ namespace GPU_HeiProMap {
                                     Graph &device_g,
                                     Matching &matching,
                                     PartitionManager &p_manager) {
+        ScopedTimer _t("matching", "HeavyEdgeMatcher", "heavy_edge_matching");
+
         for (u32 iteration = 0; iteration < hem.max_iterations_heavy; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
 
@@ -190,6 +194,8 @@ namespace GPU_HeiProMap {
                               const Graph &device_g,
                               Matching &matching,
                               PartitionManager &p_manager) {
+        ScopedTimer _t("matching", "HeavyEdgeMatcher", "leaf_matching");
+
         for (u32 iteration = 0; iteration < hem.max_iterations_leaf; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
 
@@ -261,6 +267,8 @@ namespace GPU_HeiProMap {
                               const Graph &device_g,
                               Matching &matching,
                               PartitionManager &p_manager) {
+        ScopedTimer _t("matching", "HeavyEdgeMatcher", "twin_matching");
+
         for (u32 iteration = 0; iteration < hem.max_iterations_twins; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
 
@@ -331,6 +339,8 @@ namespace GPU_HeiProMap {
                                   Graph &device_g,
                                   Matching &matching,
                                   PartitionManager &p_manager) {
+        ScopedTimer _t("matching", "HeavyEdgeMatcher", "relative_matching");
+
         for (u32 iteration = 0; iteration < hem.max_iterations_relatives; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
 
@@ -391,6 +401,8 @@ namespace GPU_HeiProMap {
 
     inline void build_hash_vertex_array(HeavyEdgeMatcher &hem,
                                         Graph &device_g) {
+        ScopedTimer _t("matching", "HeavyEdgeMatcher", "build_hash_vertex_array");
+
         Kokkos::deep_copy(hem.neighborhood_hash, 0);
         Kokkos::fence();
 

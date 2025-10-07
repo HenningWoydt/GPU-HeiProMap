@@ -34,7 +34,6 @@ namespace GPU_HeiProMap {
     struct HM_Item {
         HM_DeviceGraph device_g;
         std::vector<int> identifier; // host-only container
-        JetDeviceEntries o_to_n;
         JetDeviceEntries n_to_o;
     };
 
@@ -187,7 +186,7 @@ namespace GPU_HeiProMap {
             _t_graph.stop();
 
             ScopedTimer _t_push("partitioning", "create_subgraphs", "push");
-            stack.push_back({device_sub_g, identifier, o_to_n_sub, n_to_o_sub});
+            stack.push_back({device_sub_g, identifier, n_to_o_sub});
             stack.back().identifier.push_back(id);
             _t_push.stop();
         }

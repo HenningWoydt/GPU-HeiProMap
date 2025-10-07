@@ -62,19 +62,13 @@ namespace GPU_HeiProMap {
     typedef s64 weight_t;
     typedef u32 partition_t;
 
-#if defined(KOKKOS_ENABLE_CUDA)
-    using HostVertex = Kokkos::View<vertex_t *, Kokkos::CudaHostPinnedSpace>;
-    using HostWeight = Kokkos::View<weight_t *, Kokkos::CudaHostPinnedSpace>;
-    using HostPartition = Kokkos::View<partition_t *, Kokkos::CudaHostPinnedSpace>;
-    using HostU8 = Kokkos::View<u8 *, Kokkos::CudaHostPinnedSpace>;
-    using HostU64 = Kokkos::View<u64 *, Kokkos::CudaHostPinnedSpace>;
-#else
     using HostVertex = Kokkos::View<vertex_t *, Kokkos::HostSpace>;
     using HostWeight = Kokkos::View<weight_t *, Kokkos::HostSpace>;
     using HostPartition = Kokkos::View<partition_t *, Kokkos::HostSpace>;
     using HostU8 = Kokkos::View<u8 *, Kokkos::HostSpace>;
     using HostU64 = Kokkos::View<u64 *, Kokkos::HostSpace>;
-#endif
+
+
     using DeviceMemorySpace = Kokkos::DefaultExecutionSpace::memory_space;
 
     using DeviceVertex = Kokkos::View<vertex_t *, DeviceMemorySpace>;

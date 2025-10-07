@@ -38,11 +38,13 @@ namespace GPU_HeiProMap {
     };
 
     inline Matching initialize_matching(const vertex_t t_n) {
+        ScopedTimer _t("io", "Matching", "allocate");
+
         Matching matching;
         matching.n = t_n;
 
-        matching.matching = DeviceVertex("matching", t_n);
-        matching.o_to_n = DeviceVertex("o_to_n", t_n);
+        matching.matching = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "matching"), t_n);
+        matching.o_to_n = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), t_n);
 
         Kokkos::parallel_for("init_matching", t_n, KOKKOS_LAMBDA(const vertex_t u) {
             matching.matching(u) = u;
@@ -54,6 +56,8 @@ namespace GPU_HeiProMap {
     }
 
     inline vertex_t n_matched_v(const Matching &matching) {
+        ScopedTimer _t("matching", "Matching", "n_matched_v");
+
         vertex_t n = 0;
 
         Kokkos::parallel_reduce("count_matches", matching.n, KOKKOS_LAMBDA(const vertex_t u, vertex_t &local_count) {
@@ -68,9 +72,10 @@ namespace GPU_HeiProMap {
     }
 
     inline void determine_translation(Matching &matching) {
-        DeviceU32 needs_id("needs_id", matching.n);
-        DeviceVertex assigned_id("assigned_id", matching.n);
-        Kokkos::fence();
+        ScopedTimer _t("matching", "Matching", "determine_translation");
+
+        DeviceU32 needs_id(Kokkos::view_alloc(Kokkos::WithoutInitializing, "needs_id"), matching.n);
+        DeviceVertex assigned_id(Kokkos::view_alloc(Kokkos::WithoutInitializing, "assigned_id"), matching.n);
 
         // First, mark which vertices need IDs
         Kokkos::parallel_for("mark_needs_id", matching.n, KOKKOS_LAMBDA(const vertex_t u) {

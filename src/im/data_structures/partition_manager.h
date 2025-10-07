@@ -43,14 +43,15 @@ namespace GPU_HeiProMap {
     inline PartitionManager initialize_p_manager(const vertex_t t_n,
                                                  const partition_t t_k,
                                                  const weight_t t_lmax) {
+        ScopedTimer _t("io", "PartitionManager", "allocate");
         PartitionManager p_manager;
 
         p_manager.n = t_n;
         p_manager.k = t_k;
         p_manager.lmax = t_lmax;
 
-        p_manager.partition = DevicePartition("partition", t_n);
-        p_manager.bweights = DeviceWeight("b_weights", t_k);
+        p_manager.partition = DevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "partition"), t_n);
+        p_manager.bweights = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "bweights"), t_k);
 
         Kokkos::deep_copy(p_manager.partition, 0);
         Kokkos::deep_copy(p_manager.bweights, 0);
@@ -60,6 +61,8 @@ namespace GPU_HeiProMap {
     }
 
     inline void copy_into(PartitionManager &dst, const PartitionManager &src, u32 n) {
+        ScopedTimer _t("refine", "PartitionManager", "copy_into");
+
         dst.n = src.n;
         dst.k = src.k;
         dst.lmax = src.lmax;
@@ -73,8 +76,10 @@ namespace GPU_HeiProMap {
 
     inline void contract(PartitionManager &p_manager,
                          Matching &matching) {
+        ScopedTimer _t("coarsening", "PartitionManager", "contract");
+
         // reset activity
-        DevicePartition temp_device_partition = DevicePartition("partition", p_manager.n);
+        DevicePartition temp_device_partition = DevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "partition"), p_manager.n);
 
         Kokkos::parallel_for("initialize", matching.n, KOKKOS_LAMBDA(const vertex_t u) {
             if (u == matching.matching(u)) {
@@ -94,6 +99,8 @@ namespace GPU_HeiProMap {
 
     inline void uncontract(PartitionManager &p_manager,
                            Matching &matching) {
+        ScopedTimer _t("uncoarsening", "PartitionManager", "uncontract");
+
         // reset activity
         DevicePartition temp_device_partition = DevicePartition("device_partition", p_manager.n);
         Kokkos::parallel_for("initialize", matching.n, KOKKOS_LAMBDA(const vertex_t u) {
@@ -113,6 +120,8 @@ namespace GPU_HeiProMap {
 
     inline void recalculate_weights(PartitionManager &p_manager,
                                     const Graph &device_g) {
+        ScopedTimer _t("initial_partitioning", "PartitionManager", "recalculate_weights");
+
         // reset weights
         Kokkos::deep_copy(p_manager.bweights, 0);
         Kokkos::fence();

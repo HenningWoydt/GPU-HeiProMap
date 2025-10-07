@@ -112,16 +112,14 @@ namespace GPU_HeiProMap {
             ScopedTimer _t_item("partitioning", "HM_Solver", "first_item");
 
             std::vector<HM_Item> stack;
-            JetDeviceEntries device_o_to_n(Kokkos::view_alloc(Kokkos::WithoutInitializing, "o_to_n"), (size_t) host_g.n);
             JetDeviceEntries device_n_to_o(Kokkos::view_alloc(Kokkos::WithoutInitializing, "n_to_o"), (size_t) host_g.n);
             Kokkos::parallel_for("init_mappings", (size_t) host_g.n, KOKKOS_LAMBDA(int u) {
-                device_o_to_n(u) = u;
                 device_n_to_o(u) = u;
             });
             Kokkos::fence();
             _t_item.stop();
 
-            stack.push_back({HM_DeviceGraph(host_g), {}, device_o_to_n, device_n_to_o});
+            stack.push_back({HM_DeviceGraph(host_g), {}, device_n_to_o});
 
             while (!stack.empty()) {
                 HM_Item item = std::move(stack.back());

@@ -24,8 +24,8 @@
  * SOFTWARE.
  ******************************************************************************/
 
-#ifndef GPU_HEIPROMAP_DEVICE_GRAPH_H
-#define GPU_HEIPROMAP_DEVICE_GRAPH_H
+#ifndef GPU_HEIPROMAP_GRAPH_H
+#define GPU_HEIPROMAP_GRAPH_H
 
 #include <Kokkos_Core.hpp>
 #include <Kokkos_Sort.hpp>
@@ -62,6 +62,7 @@ namespace GPU_HeiProMap {
     }
 
     inline Graph initialize_device_g(const HostGraph &host_g) {
+        ScopedTimer _t_allocate("io", "Graph", "allocate");
         Graph device_g;
 
         device_g.n = host_g.n;
@@ -69,16 +70,23 @@ namespace GPU_HeiProMap {
         device_g.g_weight = host_g.g_weight;
 
         device_g.weights = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), host_g.n);
-        device_g.neighborhood = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), host_g.n + 1);
+        device_g.neighborhood = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), host_g.n + 1);
         device_g.edges_u = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_u"), host_g.m);
         device_g.edges_v = DeviceVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), host_g.m);
         device_g.edges_w = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), host_g.m);
 
-        Kokkos::deep_copy(device_g.weights, host_g.weights);
-        Kokkos::deep_copy(device_g.neighborhood, host_g.neighborhood);
-        Kokkos::deep_copy(device_g.edges_v, host_g.edges_v);
-        Kokkos::deep_copy(device_g.edges_w, host_g.edges_w);
-        Kokkos::fence();
+        _t_allocate.stop();
+        ScopedTimer _t_copy("io", "Graph", "copy");
+
+        auto exec = Kokkos::DefaultExecutionSpace{};
+        Kokkos::deep_copy(exec, device_g.weights, host_g.weights);
+        Kokkos::deep_copy(exec, device_g.neighborhood, host_g.neighborhood);
+        Kokkos::deep_copy(exec, device_g.edges_v, host_g.edges_v);
+        Kokkos::deep_copy(exec, device_g.edges_w, host_g.edges_w);
+        exec.fence();
+
+        _t_copy.stop();
+        ScopedTimer _t_fill_u("io", "Graph", "fill_u");
 
         Kokkos::parallel_for("fill_edges_u", device_g.n, KOKKOS_LAMBDA(const vertex_t u) {
             u32 begin = device_g.neighborhood(u);
@@ -94,6 +102,8 @@ namespace GPU_HeiProMap {
 
     inline Graph initialize_device_g(const Graph &device_g,
                                      const Matching &matching) {
+        ScopedTimer _t("coarsening", "Graph", "initialize_device_g");
+
         Graph coarse_device_g;
 
         // n, m, weights, offsets
@@ -251,4 +261,4 @@ namespace GPU_HeiProMap {
     }
 }
 
-#endif //GPU_HEIPROMAP_DEVICE_GRAPH_H
+#endif //GPU_HEIPROMAP_GRAPH_H

@@ -30,7 +30,7 @@
 #include "../../../extern/local/kahip/include/kaHIP_interface.h"
 
 #include "../../utility/definitions.h"
-#include "../data_structures/device_graph.h"
+#include "../data_structures/graph.h"
 #include "../data_structures/partition_manager.h"
 
 namespace GPU_HeiProMap {
@@ -102,9 +102,11 @@ namespace GPU_HeiProMap {
                                          f64 imbalance,
                                          u32 seed,
                                          PartitionManager &p_manager) {
+        ScopedTimer _t("initial_partitioning", "KaFFPa", "kaffpa_initial_partition");
+
         // Convert device graph to simple CSR arrays on host
         HostGraph host_g = to_host_graph(device_g);
-        HostPartition host_partition("host_partition", device_g.n);
+        HostPartition host_partition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_partition"), device_g.n);
 
         partition_t l = (partition_t) hierarchy.size();
 

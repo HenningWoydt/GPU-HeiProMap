@@ -41,24 +41,26 @@ namespace GPU_HeiProMap {
     inline DistanceOracle initialize_d_oracle(partition_t t_k,
                                               std::vector<partition_t> &t_hierarchy,
                                               std::vector<weight_t> &t_distance) {
+        ScopedTimer _t("io", "DistanceOracle", "allocate");
+
         DistanceOracle d_oracle;
 
         d_oracle.k = t_k;
-        d_oracle.w_mtx = DeviceWeight("w_mtx", t_k * t_k);
-        d_oracle.h_mtx = DevicePartition("h_mtx", t_k * t_k);
+        d_oracle.w_mtx = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "w_mtx"), t_k * t_k);
+        d_oracle.h_mtx = DevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_mtx"), t_k * t_k);
 
         // Copy hierarchy and distances to device views
         const size_t levels = t_hierarchy.size();
-        HostPartition h_hierarchy("h_hierarchy", levels);
-        HostWeight h_distance("h_distance", levels);
+        HostPartition h_hierarchy(Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_hierarchy"), levels);
+        HostWeight h_distance(Kokkos::view_alloc(Kokkos::WithoutInitializing, "h_distance"), levels);
         for (size_t i = 0; i < levels; ++i) {
             h_hierarchy(i) = t_hierarchy[i];
             h_distance(i) = t_distance[i];
         }
 
         // Copy to device
-        DevicePartition d_hierarchy("d_hierarchy", levels);
-        DeviceWeight d_distance("d_distance", levels);
+        DevicePartition d_hierarchy(Kokkos::view_alloc(Kokkos::WithoutInitializing, "d_hierarchy"), levels);
+        DeviceWeight d_distance(Kokkos::view_alloc(Kokkos::WithoutInitializing, "d_distance"), levels);
         Kokkos::deep_copy(d_hierarchy, h_hierarchy);
         Kokkos::deep_copy(d_distance, h_distance);
         Kokkos::fence();

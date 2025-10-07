@@ -32,7 +32,7 @@
 #include <iostream>
 
 #include "../../utility/definitions.h"
-#include "device_graph.h"
+#include "graph.h"
 #include "partition_manager.h"
 #include "../../utility/profiler.h"
 
@@ -229,9 +229,10 @@ namespace GPU_HeiProMap {
         const u32 words = (p_manager.k + WORD_BITS - 1) / WORD_BITS;
 
         LargeVertexPartitionCSR csr;
-        csr.row = DeviceU32("row", device_g.n + 1);
-        csr.bit_array = DeviceU64("bit_aray", device_g.n * words);
-        DeviceU32 counts("counts", device_g.n);
+        csr.row = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "row"), device_g.n + 1);
+        csr.bit_array = DeviceU64(Kokkos::view_alloc(Kokkos::WithoutInitializing, "bit_aray"), device_g.n * words);
+        DeviceU32 counts(Kokkos::view_alloc(Kokkos::WithoutInitializing, "counts"), device_g.n);
+
         Kokkos::deep_copy(csr.bit_array, 0);
         Kokkos::deep_copy(csr.row, 0);
         Kokkos::deep_copy(counts, 0);
@@ -271,8 +272,8 @@ namespace GPU_HeiProMap {
         csr.size = 0;
         Kokkos::deep_copy(csr.size, Kokkos::subview(csr.row, device_g.n));
 
-        csr.ids = DevicePartition("ids", csr.size);
-        csr.weights = DeviceWeight("weights", csr.size);
+        csr.ids = DevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "ids"), csr.size);
+        csr.weights = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "weights"), csr.size);
         Kokkos::deep_copy(csr.ids, p_manager.k);
         Kokkos::deep_copy(csr.weights, 0);
         Kokkos::fence();
@@ -315,7 +316,7 @@ namespace GPU_HeiProMap {
                                            const DeviceU32 &to_move,
                                            const DevicePartition &preferred) {
         LargeVertexPartitionCSR csr;
-        csr.row = DeviceU32("row", device_g.n + 1);
+        csr.row = DeviceU32(Kokkos::view_alloc(Kokkos::WithoutInitializing, "row"), device_g.n + 1);
         Kokkos::deep_copy(csr.row, 0);
         Kokkos::fence();
 
@@ -331,9 +332,9 @@ namespace GPU_HeiProMap {
 
         const u32 words = (p_manager.k + WORD_BITS - 1) / WORD_BITS;
 
-        csr.ids = DevicePartition("ids", csr.size);
-        csr.weights = DeviceWeight("weights", csr.size);
-        csr.bit_array = DeviceU64("bit_array", device_g.n * words);
+        csr.ids = DevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "ids"), csr.size);
+        csr.weights = DeviceWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "weights"), csr.size);
+        csr.bit_array = DeviceU64(Kokkos::view_alloc(Kokkos::WithoutInitializing, "bit_array"), device_g.n * words);
         Kokkos::deep_copy(csr.ids, p_manager.k);
         Kokkos::deep_copy(csr.weights, 0);
         Kokkos::fence();
@@ -386,6 +387,7 @@ namespace GPU_HeiProMap {
         const u32 words = (p_manager.k + WORD_BITS - 1) / WORD_BITS;
 
         Kokkos::deep_copy(csr.bit_array, 0);
+        Kokkos::fence();
 
         Kokkos::parallel_for("remove_weight", device_g.m, KOKKOS_LAMBDA(const u32 i) {
             vertex_t u = device_g.edges_u(i);
@@ -440,7 +442,6 @@ namespace GPU_HeiProMap {
 
             if (!flipped) { return; }
 
-
             // first pass check if new_u_id exists anywhere
             u32 j = r_beg + hash32(new_u_id) % r_len;
             for (u32 t = 0; t < r_len; t++) {
@@ -470,7 +471,7 @@ namespace GPU_HeiProMap {
         });
         Kokkos::fence();
 
-        DeviceU32 counts("counts", device_g.n);
+        DeviceU32 counts(Kokkos::view_alloc(Kokkos::WithoutInitializing, "counts"), device_g.n);
         u32 sum = 0;
 
         Kokkos::parallel_reduce("count_and_sum", device_g.n, KOKKOS_LAMBDA(const vertex_t u, u32 &lsum) {

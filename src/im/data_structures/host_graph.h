@@ -51,34 +51,24 @@ namespace GPU_HeiProMap {
             g_weight = 0;
         }
 
-        HostGraph(const vertex_t t_n, const vertex_t t_m, const weight_t t_weight) {
-            n = t_n;
-            m = t_m;
-            g_weight = t_weight;
-
-            g_weight = 0;
-            weights = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
-            neighborhood = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
-            neighborhood(0) = 0;
-            edges_v = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
-            edges_w = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
-        }
-
         explicit HostGraph(const std::string &file_path) {
+            ScopedTimer _t_allocate("io", "HostGraph", "allocate");
             if (!file_exists(file_path)) {
                 std::cerr << "File " << file_path << " does not exist!" << std::endl;
                 exit(EXIT_FAILURE);
             }
 
-            // Open in binary; give a large buffer (e.g., 32 MB).
             std::ifstream file(file_path, std::ios::binary);
-            static std::vector<char> big_buf(32u << 20); // 32 MB
+            std::vector<char> big_buf(32u << 20);
             file.rdbuf()->pubsetbuf(big_buf.data(), (long) big_buf.size());
 
             std::string line;
-            line.reserve(1u << 20); // 1 MB per line buffer to reduce reallocs
+            line.reserve(1u << 20);
             bool has_v_weights = false;
             bool has_e_weights = false;
+
+            _t_allocate.stop();
+            ScopedTimer _t_read_header("io", "HostGraph", "read_header");
 
             // read in header
             while (std::getline(file, line)) {
@@ -108,11 +98,14 @@ namespace GPU_HeiProMap {
                 break;
             }
 
+            _t_read_header.stop();
+            ScopedTimer _t_read_edges("io", "HostGraph", "read_edges");
+
             // read in edges
-            vertex_t u = 0;
             std::vector<vertex_t> ints(n);
             vertex_t curr_m = 0;
 
+            vertex_t u = 0;
             while (std::getline(file, line)) {
                 if (line[0] == '%') { continue; }
                 // convert the lines into ints
@@ -126,15 +119,18 @@ namespace GPU_HeiProMap {
                 weights(u) = w;
                 g_weight += w;
 
-                while (i < size) {
-                    vertex_t v = ints[i++] - 1;
-
-                    // check if edge weights
-                    w = 1;
-                    if (has_e_weights) { w = ints[i++]; }
-                    edges_v(curr_m) = v;
-                    edges_w(curr_m) = w;
-                    curr_m += 1;
+                if (has_e_weights) {
+                    for (; i < size; i += 2) {
+                        edges_v(curr_m) = ints[i] - 1;
+                        edges_w(curr_m) = ints[i + 1];
+                        curr_m += 1;
+                    }
+                } else {
+                    for (; i < size; ++i) {
+                        edges_v(curr_m) = ints[i] - 1;
+                        edges_w(curr_m) = 1;
+                        curr_m += 1;
+                    }
                 }
                 neighborhood(u + 1) = curr_m;
 
@@ -147,43 +143,6 @@ namespace GPU_HeiProMap {
             }
         }
     };
-
-    inline void free_host_graph(HostGraph &g) {
-        g.n = 0;
-        g.m = 0;
-        g.g_weight = 0;
-
-        // Reassign empty views to release device/host allocations
-        g.weights = HostWeight();
-        g.neighborhood = HostVertex();
-        g.edges_v = HostVertex();
-        g.edges_w = HostWeight();
-    }
-
-    inline void write_graph_to_metis(const HostGraph &graph, const std::string &output_file) {
-        std::ofstream out(output_file);
-        if (!out.is_open()) {
-            std::cerr << "Failed to open output file: " << output_file << std::endl;
-            exit(EXIT_FAILURE);
-        }
-
-        // Write header: n m fmt
-        out << graph.n << " " << graph.m / 2 << " 011\n";
-
-        for (vertex_t u = 0; u < graph.n; ++u) {
-            out << graph.weights(u);
-
-            for (uint64_t i = graph.neighborhood(u); i < graph.neighborhood(u + 1); ++i) {
-                vertex_t v = graph.edges_v(i) + 1;
-                weight_t w = graph.edges_w(i);
-                out << " " << v << " " << w;
-            }
-
-            out << "\n";
-        }
-
-        out.close();
-    }
 }
 
 #endif //GPU_HEIPROMAP_HOST_GRAPH_H

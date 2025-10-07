@@ -41,9 +41,9 @@ int main(int argc, char *argv[]) {
     _t_kokkos.stop();
 
     if (argc == 1) {
-        // Configuration config;
-        // config.print_help_message();
-        // return 0;
+        Configuration config;
+        config.print_help_message();
+        return 0;
         {
             ScopedTimer _t_read_args("io", "Configuration", "read_args");
 
@@ -51,10 +51,13 @@ int main(int argc, char *argv[]) {
                 {"--graph", "../../graph_collection/mapping/rgg24.graph"}, // SharedMap comm cost 10 243 578
                 {"--mapping", "../data/out/partition/rgg24.txt"},
                 {"--statistics", "../data/out/statistics/rgg24.JSON"},
+                // {"--graph", "../../graph_collection/mapping/2cubes_sphere.mtx.graph"},
+                // {"--mapping", "../data/out/partition/2cubes_sphere.mtx.graph"},
+                // {"--statistics", "../data/out/statistics/2cubes_sphere.mtx.JSON"},
                 {"--hierarchy", "4:8:6"},
                 {"--distance", "1:10:100"},
                 {"--imbalance", "0.03"},
-                {"--config", "HM"},
+                {"--config", "IM"},
                 {"--seed", "0"},
             };
 

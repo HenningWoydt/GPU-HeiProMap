@@ -52,9 +52,7 @@ namespace GPU_HeiProMap {
         std::vector<Matching> matchings;
 
         PartitionManager p_manager;
-
         DistanceOracle d_oracle;
-
 
         explicit IM_Solver(Configuration t_config) : config(std::move(t_config)) {
             io();
@@ -84,36 +82,19 @@ namespace GPU_HeiProMap {
             u32 max_level = level;
             initial_partitioning();
 
-            // v cycles
-            u32 max_cycle = 0;
-            for (u32 cycle = 0; cycle < max_cycle; ++cycle) {
-                while (!matchings.empty()) {
-                    level -= 1;
-                    uncoarsening();
-                    refinement(max_level, level);
-                }
-
-                while (device_graphs.back().n > 8 * config.k) {
-                    matching();
-                    coarsening();
-                    level += 1;
-                }
-                std::cout << "V-Cycle " << cycle << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
-            }
-
             // final refinement
             while (!matchings.empty()) {
                 level -= 1;
                 uncoarsening();
                 refinement(max_level, level);
-
-                std::cout << "Level  " << level << " " << device_graphs.back().n << " " << comm_cost(device_graphs.back(), p_manager, d_oracle) << " " << max_weight(p_manager) << " " << lmax << std::endl;
             }
 
-            HostPartition host_partition = HostPartition("host_partition", device_graphs.back().n);
+            ScopedTimer _t_write("io", "IM_Solver", "write_partition");
+            HostPartition host_partition = HostPartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_partition"), device_graphs.back().n);
             Kokkos::deep_copy(host_partition, p_manager.partition);
 
             write_partition(host_partition, device_graphs.back().n, config.mapping_out);
+            _t_write.stop();
 
             std::string config_JSON = config.to_JSON();
             std::string profile_JSON = Profiler::instance().to_JSON();
@@ -149,7 +130,6 @@ namespace GPU_HeiProMap {
             lmax = (weight_t) std::ceil((1.0 + config.imbalance) * ((f64) host_g.g_weight / (f64) config.k));
 
             device_graphs.emplace_back(initialize_device_g(host_g));
-            free_host_graph(host_g);
 
             p_manager = initialize_p_manager(device_graphs.back().n, config.k, lmax);
             d_oracle = initialize_d_oracle(config.k, config.hierarchy, config.distance);
@@ -185,7 +165,7 @@ namespace GPU_HeiProMap {
         }
 
         void refinement(u32 max_level, u32 level) {
-            LabelPropagationStruct lp_struct = initialize_lp(device_graphs.back().n, device_graphs.back().m, config.k, lmax);
+            JetLabelPropagation lp_struct = initialize_lp(device_graphs.back().n, device_graphs.back().m, config.k, lmax);
 
             lp_struct.n_max_iterations = 12 + level;
             if (level == 0) {
