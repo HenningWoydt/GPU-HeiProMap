@@ -505,6 +505,6 @@ namespace GPU_HeiProMap {
 
         return matching;
     }
-} // namespace GPU_HeiProMap
+}
 
 #endif // GPU_HEIPROMAP_HEAVY_EDGE_MATCHING_H
