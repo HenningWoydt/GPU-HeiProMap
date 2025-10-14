@@ -27,15 +27,26 @@ The total number of PEs is $k = \prod_{i=1}^{\ell}a_i$.
 Additionally, the sequence $D = d_1 : d_2 : \ldots : d_\ell$ describes the communication cost between the different PEs.
 Two PEs on the same processor have distance $d_1$, two PEs on the same node but on different processor have distance $d_2$, two PEs in the same rack but on different nodes have distance $d_3$, and so forth.
 
+### Results
+SharedMap offers State-Of-The-Art solution quality among available parallel mapping algorithms.
+It has better quality while also being slightly faster.
+See the left figure.
+
+Even in the serial case, it is stronger and faster than the previous best algorithm.
+See the right figure.
+For more information on the algorithm, we refer to our work...
+
+<img src="./misc/all_comm_cost.png" alt="drawing" width="400"/> <img src="./misc/all_speedup.png" alt="drawing" width="400"/>
+
 Requirements
 -----------
-This project utilizes [Kokkos](https://github.com/kokkos/kokkos), [Kokkos Kernels](https://github.com/kokkos/kokkos-kernels), [KaHIP](https://github.com/KaHIP/KaHIP), and [METIS](https://github.com/KaMinI/METIS) libraries.
-
 - A Linux operating system (others have not yet been tested).
 - A modern compiler that supports C++17, such as `g++`.
 - The [cmake](https://cmake.org/) build system (>=3.16).
 - CUDA toolkit (for GPU backend).
 - OpenMP (for CPU backend).
+
+This project utilizes [Kokkos](https://github.com/kokkos/kokkos), [Kokkos Kernels](https://github.com/kokkos/kokkos-kernels), [KaHIP](https://github.com/KaHIP/KaHIP), and [METIS](https://github.com/KaMinI/METIS) libraries.
 
 Installation
 -----------
