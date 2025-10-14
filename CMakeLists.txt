@@ -29,7 +29,7 @@ find_path(KAHIP_INCLUDE_DIR
 )
 
 if(NOT KAHIP_LIBRARY OR NOT KAHIP_INCLUDE_DIR)
-    message(FATAL_ERROR "KaHIP library not found. Please run ./build_kahip.sh first")
+    message(FATAL_ERROR "KaHIP library not found.")
 endif()
 
 message(STATUS "Found KaHIP: ${KAHIP_LIBRARY}")
