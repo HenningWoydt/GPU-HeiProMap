@@ -69,7 +69,7 @@ Usage
 -----------
 Call `GPU-HeiProMap` in the `build` folder:
 
-    ./build/GPU-HeiProMap -g <inpath-graph> -m <outpath-partition> -h <hierarchy> -d <distance> -e <imbalance> -c {IM|HM|HM-ultra} -s <seed>
+    ./build/GPU-HeiProMap -g <inpath-graph> -m <outpath-partition> -h <hierarchy> -d <distance> -e <imbalance> -c {IM|HM|HM-ultra}
 
 ### Configuration
 The available command line arguments and a short description.
@@ -88,10 +88,10 @@ Optional:
 
 ### Example
 The graph `input.graph` is partitioned on a supercomputer with a hierarchy of `4:8:6` with distances `1:10:100` and an allowed imbalance of `3%`.
-As the configuration we choose `HM` with seed `42`.
+As the configuration we choose `HM`.
 The resulting partition is stored in `output.txt`.
 
-    ./GPU-HeiProMap -g input.graph -m output.txt -h 4:8:6 -d 1:10:100 -e 0.03 -c HM -s 42
+    ./GPU-HeiProMap -g input.graph -m output.txt -h 4:8:6 -d 1:10:100 -e 0.03 -c HM
 
 ## Bugs, Questions, Comments and Ideas
 
