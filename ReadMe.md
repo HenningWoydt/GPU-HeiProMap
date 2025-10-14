@@ -81,7 +81,6 @@ You can also use `./GPU-HeiProMap --help` for a list of available parameters.
 [ -d | --distance   ] <distance>          : The distance of the processors in the format a:b:c: ... e.g., 1:10:100 .
 [ -e | --imbalance  ] <imbalance>         : The maximum allowed imbalance per block e.g., 0.03 allows for a maximum imbalance of 3%.
 [ -c | --config     ] <config>            : Which algorithm to use. Allowed values are {IM, HM, HM-ultra}.
-[ -s | --seed       ] <seed>              : Seed to diversify partitioning results.
 
 Optional:
 [ --statistics      ] <statistics-file>   : Path to output statistics file in JSON format.
@@ -100,7 +99,11 @@ If any bugs arise, questions occur, comments want to be shared, or ideas discuss
 
 Licensing
 ---------
-GPU-HeiProMap is free software provided under the MIT License. For more information see the [LICENSE file][LF]. This algorithm is available to everyone, welcoming all who wish to make use of it. If you use GPU-HeiProMap in an academic setting please cite
+GPU-HeiProMap is free software provided under the MIT License. For more information see the [LICENSE file][LF]. This algorithm is available to everyone, welcoming all who wish to make use of it.
+
+Reference
+---------
+If you use GPU-HeiProMap in an academic setting please cite
 ```
 TODO
 ```
