@@ -28,13 +28,13 @@ Additionally, the sequence $D = d_1 : d_2 : \ldots : d_\ell$ describes the commu
 Two PEs on the same processor have distance $d_1$, two PEs on the same node but on different processor have distance $d_2$, two PEs in the same rack but on different nodes have distance $d_3$, and so forth.
 
 ### Results
-SharedMap offers State-Of-The-Art solution quality among available parallel mapping algorithms.
-It has better quality while also being slightly faster.
-See the left figure.
+GPU-HeiProMap offers competitive performance compared to state-of-the-art CPU-based mapping algorithms.
+Our GPU-HM-ultra algorithm achieves superior solution quality compared to IntegratedMapping while being significantly faster, particularly on large instances.
+See the left figure for speedup comparison.
 
-Even in the serial case, it is stronger and faster than the previous best algorithm.
-See the right figure.
-For more information on the algorithm, we refer to our work...
+GPU-IM provides exceptional runtime performance, achieving up to 600× speedup over CPU algorithms while maintaining reasonable solution quality.
+The right figure shows the performance profile of communication costs across different algorithms.
+For detailed algorithm performance and experimental evaluation, we refer to our work...
 
 <img src="./misc/all_comm_cost.png" alt="drawing" width="400"/> <img src="./misc/all_speedup.png" alt="drawing" width="400"/>
 
