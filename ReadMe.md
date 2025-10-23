@@ -105,7 +105,15 @@ Reference
 ---------
 If you use GPU-HeiProMap in an academic setting please cite
 ```
-TODO
+@misc{GPUHeiProMap,
+      title={GPU-Accelerated Algorithms for Process Mapping}, 
+      author={Petr Samoldekin and Christian Schulz and Henning Woydt},
+      year={2025},
+      eprint={2510.12196},
+      archivePrefix={arXiv},
+      primaryClass={cs.DC},
+      url={https://arxiv.org/abs/2510.12196}, 
+}
 ```
 
 [LF]: https://github.com/HenningWoydt/GPU-HeiProMap/blob/master/LICENSE "License"
