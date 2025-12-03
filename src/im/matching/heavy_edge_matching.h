@@ -120,7 +120,7 @@ namespace GPU_HeiProMap {
 
     inline HeavyEdgeMatcher initialize_hem(const vertex_t t_n,
                                            const weight_t t_lmax) {
-        ScopedTimer _t("io", "HeavyEdgeMatcher", "allocate");
+        ScopedTimer _t("coarsening", "HeavyEdgeMatcher", "allocate");
 
         HeavyEdgeMatcher hem;
         hem.n = t_n;
@@ -145,7 +145,7 @@ namespace GPU_HeiProMap {
                                     Graph &device_g,
                                     Matching &matching,
                                     PartitionManager &p_manager) {
-        ScopedTimer _t("matching", "HeavyEdgeMatcher", "heavy_edge_matching");
+        ScopedTimer _t("coarsening", "HeavyEdgeMatcher", "heavy_edge_matching");
 
         for (u32 iteration = 0; iteration < hem.max_iterations_heavy; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
@@ -194,7 +194,7 @@ namespace GPU_HeiProMap {
                               const Graph &device_g,
                               Matching &matching,
                               PartitionManager &p_manager) {
-        ScopedTimer _t("matching", "HeavyEdgeMatcher", "leaf_matching");
+        ScopedTimer _t("coarsening", "HeavyEdgeMatcher", "leaf_matching");
 
         for (u32 iteration = 0; iteration < hem.max_iterations_leaf; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
@@ -267,7 +267,7 @@ namespace GPU_HeiProMap {
                               const Graph &device_g,
                               Matching &matching,
                               PartitionManager &p_manager) {
-        ScopedTimer _t("matching", "HeavyEdgeMatcher", "twin_matching");
+        ScopedTimer _t("coarsening", "HeavyEdgeMatcher", "twin_matching");
 
         for (u32 iteration = 0; iteration < hem.max_iterations_twins; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
@@ -339,7 +339,7 @@ namespace GPU_HeiProMap {
                                   Graph &device_g,
                                   Matching &matching,
                                   PartitionManager &p_manager) {
-        ScopedTimer _t("matching", "HeavyEdgeMatcher", "relative_matching");
+        ScopedTimer _t("coarsening", "HeavyEdgeMatcher", "relative_matching");
 
         for (u32 iteration = 0; iteration < hem.max_iterations_relatives; ++iteration) {
             if ((f64) n_matched_v(matching) >= hem.threshold * (f64) device_g.n) { return; }
@@ -401,7 +401,7 @@ namespace GPU_HeiProMap {
 
     inline void build_hash_vertex_array(HeavyEdgeMatcher &hem,
                                         Graph &device_g) {
-        ScopedTimer _t("matching", "HeavyEdgeMatcher", "build_hash_vertex_array");
+        ScopedTimer _t("coarsening", "HeavyEdgeMatcher", "build_hash_vertex_array");
 
         Kokkos::deep_copy(hem.neighborhood_hash, 0);
         Kokkos::fence();

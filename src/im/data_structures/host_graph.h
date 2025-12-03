@@ -3,7 +3,7 @@
  *
  * This file is part of GPU-HeiProMap.
  *
- * Copyright (C) 2025 Henning Woydt <henning.woydt@informatik.uni-heidelberg.de>
+ * Copyright (C) 2025 Henning Woydt <henninwoydt@informatik.uni-heidelberde>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -52,95 +52,155 @@ namespace GPU_HeiProMap {
         }
 
         explicit HostGraph(const std::string &file_path) {
-            ScopedTimer _t_allocate("io", "HostGraph", "allocate");
+            ScopedTimer _t_allocate("io", "CSRGraph", "allocate");
             if (!file_exists(file_path)) {
                 std::cerr << "File " << file_path << " does not exist!" << std::endl;
                 exit(EXIT_FAILURE);
             }
 
-            std::ifstream file(file_path, std::ios::binary);
-            std::vector<char> big_buf(32u << 20);
-            file.rdbuf()->pubsetbuf(big_buf.data(), (long) big_buf.size());
-
-            std::string line;
-            line.reserve(1u << 20);
-            bool has_v_weights = false;
-            bool has_e_weights = false;
+            // mmap the whole file
+            MMap mm = mmap_file_ro(file_path);
+            char *p = mm.data;
+            const char *end = mm.data + mm.size;
 
             _t_allocate.stop();
-            ScopedTimer _t_read_header("io", "HostGraph", "read_header");
+            ScopedTimer _t_read_header("io", "CSRGraph", "read_header");
 
-            // read in header
-            while (std::getline(file, line)) {
-                if (line[0] == '%') { continue; }
-
-                // read in header
-                std::vector<std::string> header = split_ws(line);
-                n = (vertex_t) std::stoul(header[0]);
-                m = (vertex_t) std::stoul(header[1]) * 2;
-
-                // allocate space
-                g_weight = 0;
-                weights = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "vertex_weights"), n);
-                neighborhood = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
-                neighborhood(0) = 0;
-                edges_v = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
-                edges_w = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
-
-                // read in header
-                std::string fmt = "000";
-                if (header.size() == 3 && header[2].size() == 3) {
-                    fmt = header[2];
-                }
-                has_v_weights = fmt[1] == '1';
-                has_e_weights = fmt[2] == '1';
-
-                break;
+            // skip comment lines
+            while (*p == '%') {
+                while (*p != '\n') { ++p; }
+                ++p;
             }
 
-            _t_read_header.stop();
-            ScopedTimer _t_read_edges("io", "HostGraph", "read_edges");
+            // skip whitespace
+            while (*p == ' ') { ++p; }
 
-            // read in edges
-            std::vector<vertex_t> ints(n);
-            vertex_t curr_m = 0;
+            // read number of vertices - optimized parsing
+            n = 0;
+            while (*p != ' ' && *p != '\n') {
+                n = n * 10 + (vertex_t) (*p - '0');
+                ++p;
+            }
 
-            vertex_t u = 0;
-            while (std::getline(file, line)) {
-                if (line[0] == '%') { continue; }
-                // convert the lines into ints
-                size_t size = str_to_ints(line, ints);
+            // skip whitespace
+            while (*p == ' ') { ++p; }
 
-                size_t i = 0;
+            // read number of edges - optimized parsing  
+            m = 0;
+            while (*p != ' ' && *p != '\n') {
+                m = m * 10 + (vertex_t) (*p - '0');
+                ++p;
+            }
+            m *= 2;
 
-                // check if vertex weights
-                weight_t w = 1;
-                if (has_v_weights) { w = ints[i++]; }
-                weights(u) = w;
-                g_weight += w;
-
-                if (has_e_weights) {
-                    for (; i < size; i += 2) {
-                        edges_v(curr_m) = ints[i] - 1;
-                        edges_w(curr_m) = ints[i + 1];
-                        curr_m += 1;
-                    }
-                } else {
-                    for (; i < size; ++i) {
-                        edges_v(curr_m) = ints[i] - 1;
-                        edges_w(curr_m) = 1;
-                        curr_m += 1;
+            // search end of line or fmt
+            std::string fmt = "000";
+            bool has_v_weights = false;
+            bool has_e_weights = false;
+            while (*p == ' ') { ++p; }
+            if (*p != '\n') {
+                // found fmt
+                fmt[0] = *p;
+                ++p;
+                if (*p != '\n') {
+                    // found fmt
+                    fmt[1] = *p;
+                    ++p;
+                    if (*p != '\n') {
+                        // found fmt
+                        fmt[2] = *p;
+                        ++p;
                     }
                 }
-                neighborhood(u + 1) = curr_m;
+                // skip whitespaces
+                while (*p == ' ') { ++p; }
+            }
+            g_weight = 0;
+            weights = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "weights"), n);
+            neighborhood = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "neighborhood"), n + 1);
+            neighborhood(0) = 0;
+            edges_v = HostVertex(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_v"), m);
+            edges_w = HostWeight(Kokkos::view_alloc(Kokkos::WithoutInitializing, "edges_w"), m);
+            has_v_weights = fmt[1] == '1';
+            has_e_weights = fmt[2] == '1';
 
-                u += 1;
+            _t_read_header.stop();
+            ScopedTimer _t_read_edges("io", "CSRGraph", "read_edges");
+
+            ++p;
+            vertex_t u = 0;
+            size_t curr_m = 0;
+
+            // Pre-fetch data pointers for better cache performance
+            vertex_t *edges_v_ptr = edges_v.data();
+            weight_t *edges_w_ptr = edges_w.data();
+            weight_t *weights_ptr = weights.data();
+            vertex_t *neighborhood_ptr = neighborhood.data();
+
+            while (p < end) {
+                // skip comment lines
+                while (*p == '%') {
+                    while (*p != '\n') { ++p; }
+                    ++p;
+                }
+
+                // skip whitespaces
+                while (*p == ' ') { ++p; }
+
+                // read in vertex weight - optimized
+                weight_t vw = 1;
+                if (has_v_weights) {
+                    vw = 0;
+                    while (*p != ' ' && *p != '\n') {
+                        vw = vw * 10 + (weight_t) (*p - '0');
+                        ++p;
+                    }
+                    // skip whitespaces
+                    while (*p == ' ') { ++p; }
+                }
+                weights_ptr[u] = vw;
+                g_weight += vw;
+
+                // read in edges - optimized inner loop
+                while (*p != '\n' && p < end) {
+                    vertex_t v = 0;
+                    while (*p != ' ' && *p != '\n') {
+                        v = v * 10 + (vertex_t) (*p - '0');
+                        ++p;
+                    }
+
+                    // skip whitespaces
+                    while (*p == ' ') { ++p; }
+
+                    weight_t w = 1;
+                    if (has_e_weights) {
+                        w = 0;
+                        while (*p != ' ' && *p != '\n') {
+                            w = w * 10 + (weight_t) (*p - '0');
+                            ++p;
+                        }
+                        // skip whitespaces
+                        while (*p == ' ') { ++p; }
+                    }
+
+                    edges_v_ptr[curr_m] = v - 1;
+                    edges_w_ptr[curr_m] = w;
+                    ++curr_m;
+                }
+                neighborhood_ptr[u + 1] = (vertex_t) curr_m;
+                ++u;
+                ++p;
             }
 
             if (curr_m != m) {
-                std::cerr << "Number of expected edges " << m << " not equal to number edges " << curr_m << " found!" << std::endl;
+                std::cerr << "Number of expected edges " << m << " not equal to number edges " << curr_m << " found!\n";
+                munmap_file(mm);
                 exit(EXIT_FAILURE);
             }
+
+            _t_read_edges.stop();
+            // done with the file
+            munmap_file(mm);
         }
     };
 }

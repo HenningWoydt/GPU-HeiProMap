@@ -36,14 +36,18 @@
 using namespace GPU_HeiProMap;
 
 int main(int argc, char *argv[]) {
+    auto sp = get_time_point();
+    std::ios::sync_with_stdio(false);
+    std::cout.tie(nullptr);
+
     ScopedTimer _t_kokkos("io", "Kokkos", "ScopeGuard");
     Kokkos::ScopeGuard guard(argc, argv);
     _t_kokkos.stop();
 
     if (argc == 1) {
-        Configuration config;
-        config.print_help_message();
-        return 0;
+        // Configuration config;
+        // config.print_help_message();
+        // return 0;
         {
             ScopedTimer _t_read_args("io", "Configuration", "read_args");
 
@@ -113,6 +117,11 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
+
+    Profiler::instance().print_table_ascii_colored(std::cout);
+
+    auto ep = get_time_point();
+    std::cout << "Total Time: " << get_seconds(sp, ep) << " seconds." << std::endl;
 
     return 0;
 }

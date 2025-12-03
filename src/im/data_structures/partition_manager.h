@@ -76,7 +76,7 @@ namespace GPU_HeiProMap {
 
     inline void contract(PartitionManager &p_manager,
                          Matching &matching) {
-        ScopedTimer _t("coarsening", "PartitionManager", "contract");
+        ScopedTimer _t("contraction", "PartitionManager", "contract");
 
         // reset activity
         DevicePartition temp_device_partition = DevicePartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "partition"), p_manager.n);
@@ -99,7 +99,7 @@ namespace GPU_HeiProMap {
 
     inline void uncontract(PartitionManager &p_manager,
                            Matching &matching) {
-        ScopedTimer _t("uncoarsening", "PartitionManager", "uncontract");
+        ScopedTimer _t("uncontraction", "PartitionManager", "uncontract");
 
         // reset activity
         DevicePartition temp_device_partition = DevicePartition("device_partition", p_manager.n);

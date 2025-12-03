@@ -38,7 +38,7 @@ namespace GPU_HeiProMap {
     };
 
     inline Matching initialize_matching(const vertex_t t_n) {
-        ScopedTimer _t("io", "Matching", "allocate");
+        ScopedTimer _t("coarsening", "Matching", "allocate");
 
         Matching matching;
         matching.n = t_n;
@@ -56,7 +56,7 @@ namespace GPU_HeiProMap {
     }
 
     inline vertex_t n_matched_v(const Matching &matching) {
-        ScopedTimer _t("matching", "Matching", "n_matched_v");
+        ScopedTimer _t("coarsening", "Matching", "n_matched_v");
 
         vertex_t n = 0;
 
@@ -72,7 +72,7 @@ namespace GPU_HeiProMap {
     }
 
     inline void determine_translation(Matching &matching) {
-        ScopedTimer _t("matching", "Matching", "determine_translation");
+        ScopedTimer _t("coarsening", "Matching", "determine_translation");
 
         DeviceU32 needs_id(Kokkos::view_alloc(Kokkos::WithoutInitializing, "needs_id"), matching.n);
         DeviceVertex assigned_id(Kokkos::view_alloc(Kokkos::WithoutInitializing, "assigned_id"), matching.n);

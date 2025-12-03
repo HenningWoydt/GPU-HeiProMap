@@ -70,7 +70,7 @@ namespace GPU_HeiProMap {
                                              const vertex_t t_m,
                                              const partition_t t_k,
                                              const weight_t t_lmax) {
-        ScopedTimer _t("io", "JetLabelPropagation", "allocate");
+        ScopedTimer _t("refinement", "JetLabelPropagation", "allocate");
 
         JetLabelPropagation lp;
 
@@ -238,7 +238,7 @@ namespace GPU_HeiProMap {
                       Graph &device_g,
                       DistanceOracle &d_oracle,
                       LargeVertexPartitionCSR &csr) {
-        ScopedTimer _t("refine", "JetLabelPropagation", "jetlp");
+        ScopedTimer _t("refinement", "JetLabelPropagation", "jetlp");
 
         Kokkos::deep_copy(lp.to_move, 0);
         Kokkos::deep_copy(lp.gain2, -max_sentinel<weight_t>());
@@ -328,7 +328,7 @@ namespace GPU_HeiProMap {
                       Graph &device_g,
                       DistanceOracle &d_oracle,
                       LargeVertexPartitionCSR &csr) {
-        ScopedTimer _t("refine", "JetLabelPropagation", "jetrw");
+        ScopedTimer _t("refinement", "JetLabelPropagation", "jetrw");
 
         Kokkos::deep_copy(lp.bucket_counts, 0);
         Kokkos::deep_copy(lp.to_move, 0);
@@ -479,7 +479,7 @@ namespace GPU_HeiProMap {
                       DistanceOracle &d_oracle,
                       u32 seed,
                       LargeVertexPartitionCSR &csr) {
-        ScopedTimer _t("refine", "JetLabelPropagation", "jetrs");
+        ScopedTimer _t("refinement", "JetLabelPropagation", "jetrs");
 
         Kokkos::deep_copy(lp.bucket_counts, 0);
         Kokkos::deep_copy(lp.to_move, 0);
@@ -608,11 +608,11 @@ namespace GPU_HeiProMap {
                        u32 level) {
         copy_into(lp.p_manager, p_manager, device_g.n);
 
-        ScopedTimer _t("refine", "LargeVertexPartitionCSR", "build_scratch");
+        ScopedTimer _t("refinement", "LargeVertexPartitionCSR", "build_scratch");
         LargeVertexPartitionCSR large_csr = rebuild_scratch(device_g, lp.p_manager);
         _t.stop();
 
-        ScopedTimer _t_comm_cost("refine", "JetLabelPropagation", "get_comm_cost");
+        ScopedTimer _t_comm_cost("refinement", "JetLabelPropagation", "get_comm_cost");
         weight_t best_comm_cost = comm_cost(device_g, lp.p_manager, large_csr, d_oracle);
         weight_t best_weight = max_weight(lp.p_manager);
         _t_comm_cost.stop();
@@ -624,7 +624,7 @@ namespace GPU_HeiProMap {
         weight_t last_rw_comm_cost = max_sentinel<weight_t>();
         weight_t last_rw_weight = max_sentinel<weight_t>();
 
-        ScopedTimer _t_reset_lock("refine", "JetLabelPropagation", "reset_lock");
+        ScopedTimer _t_reset_lock("refinement", "JetLabelPropagation", "reset_lock");
         Kokkos::deep_copy(lp.locked, 0);
         Kokkos::fence();
         _t_reset_lock.stop();
@@ -639,7 +639,7 @@ namespace GPU_HeiProMap {
                 jetlp(lp, device_g, d_oracle, large_csr);
                 weak_iterations = 0;
             } else {
-                ScopedTimer _t_reset_lock2("refine", "JetLabelPropagation", "reset_lock");
+                ScopedTimer _t_reset_lock2("refinement", "JetLabelPropagation", "reset_lock");
                 Kokkos::deep_copy(lp.locked, 0);
                 Kokkos::fence();
                 _t_reset_lock2.stop();
@@ -653,7 +653,7 @@ namespace GPU_HeiProMap {
                 }
             }
 
-            ScopedTimer _t_comm_cost2("refine", "JetLabelPropagation", "get_comm_cost");
+            ScopedTimer _t_comm_cost2("refinement", "JetLabelPropagation", "get_comm_cost");
             curr_comm_cost = comm_cost(device_g, lp.p_manager, large_csr, d_oracle);
             curr_weight = max_weight(lp.p_manager);
             _t_comm_cost2.stop();

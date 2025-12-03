@@ -102,7 +102,7 @@ namespace GPU_HeiProMap {
 
     inline Graph initialize_device_g(const Graph &device_g,
                                      const Matching &matching) {
-        ScopedTimer _t("coarsening", "Graph", "initialize_device_g");
+        ScopedTimer _t("contraction", "Graph", "initialize_device_g");
 
         Graph coarse_device_g;
 
