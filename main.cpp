@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
             ScopedTimer _t_read_args("io", "Configuration", "read_args");
 
             std::vector<std::pair<std::string, std::string> > input = {
-                {"--graph", "../../graph_collection/mapping/rgg24.graph"}, // SharedMap comm cost 10 243 578
+                {"--graph", "../../GraPaRepo/data/mapping/rgg24.graph"}, // SharedMap comm cost 10 243 578
                 {"--mapping", "../data/out/partition/rgg24.txt"},
                 {"--statistics", "../data/out/statistics/rgg24.JSON"},
                 // {"--graph", "../../graph_collection/mapping/2cubes_sphere.mtx.graph"},
