@@ -55,6 +55,7 @@ namespace GPU_HeiProMap {
         DistanceOracle d_oracle;
 
         f64 io_ms = 0.0;
+        f64 misc_ms = 0.0;
         f64 coarsening_ms = 0.0;
         f64 contraction_ms = 0.0;
         f64 initial_partitioning_ms = 0.0;
@@ -104,8 +105,11 @@ namespace GPU_HeiProMap {
             }
 
             ScopedTimer _t_write("io", "IM_Solver", "write_partition");
+            auto p = get_time_point();
             HostPartition host_partition = HostPartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_partition"), device_graphs.back().n);
             Kokkos::deep_copy(host_partition, p_manager.partition);
+
+            misc_ms += get_milli_seconds(p, get_time_point());
 
             write_partition(host_partition, device_graphs.back().n, config.mapping_out);
             _t_write.stop();
@@ -136,6 +140,7 @@ namespace GPU_HeiProMap {
             std::cout << "#oload partitions : " << n_overloaded_partitions << std::endl;
             std::cout << "Sum oload weights : " << sum_too_much << std::endl;
             std::cout << "IO            : " << io_ms << std::endl;
+            std::cout << "Misc          : " << misc_ms << std::endl;
             std::cout << "Coarsening    : " << coarsening_ms << std::endl;
             std::cout << "Contraction   : " << contraction_ms << std::endl;
             std::cout << "Init. Part.   : " << initial_partitioning_ms << std::endl;
@@ -171,6 +176,10 @@ namespace GPU_HeiProMap {
 
             host_g = HostGraph(config.graph_in);
 
+            io_ms += get_milli_seconds(p, get_time_point());
+
+            auto p1 = get_time_point();
+
             lmax = (weight_t) std::ceil((1.0 + config.imbalance) * ((f64) host_g.g_weight / (f64) config.k));
 
             device_graphs.emplace_back(initialize_device_g(host_g));
@@ -178,7 +187,7 @@ namespace GPU_HeiProMap {
             p_manager = initialize_p_manager(device_graphs.back().n, config.k, lmax);
             d_oracle = initialize_d_oracle(config.k, config.hierarchy, config.distance);
 
-            io_ms += get_milli_seconds(p, get_time_point());
+            misc_ms += get_milli_seconds(p1, get_time_point());
 
             assert_state_pre_partition(device_graphs.back(), d_oracle, config.hierarchy, config.distance);
         }
