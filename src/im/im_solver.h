@@ -111,7 +111,9 @@ namespace GPU_HeiProMap {
 
             misc_ms += get_milli_seconds(p, get_time_point());
 
+            auto p1 = get_time_point();
             write_partition(host_partition, device_graphs.back().n, config.mapping_out);
+            io_ms += get_milli_seconds(p1, get_time_point());
             _t_write.stop();
 
             auto ep = get_time_point();
