@@ -44,9 +44,7 @@ namespace GPU_HeiProMap {
         explicit HM_Solver(Configuration t_config) : config(std::move(t_config)) {
         }
 
-        JetHostPartition solve() {
-            HM_HostGraph g(config.graph_in);
-
+        JetHostPartition solve(HM_HostGraph &g) {
             // solve problem
             JetHostPartition partition = internal_solve(g);
 

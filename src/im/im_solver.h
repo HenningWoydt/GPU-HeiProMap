@@ -47,7 +47,6 @@ namespace GPU_HeiProMap {
         Configuration config;
         weight_t lmax = 0;
 
-        HostGraph host_g;
         std::vector<Graph> device_graphs;
         std::vector<Matching> matchings;
 
@@ -67,10 +66,10 @@ namespace GPU_HeiProMap {
         }
 
 
-        HostPartition solve() {
+        HostPartition solve(HostGraph &host_g) {
             auto sp = get_time_point();
 
-            initialize();
+            initialize(host_g);
 
             partition_t c = 128;
 
@@ -173,10 +172,8 @@ namespace GPU_HeiProMap {
         }
 
     private:
-        void initialize() {
+        void initialize(HostGraph &host_g) {
             auto p = get_time_point();
-
-            host_g = HostGraph(config.graph_in);
 
             io_ms += get_milli_seconds(p, get_time_point());
 

@@ -40,24 +40,24 @@ int main(int argc, char *argv[]) {
     std::ios::sync_with_stdio(false);
     std::cout.tie(nullptr);
 
-    ScopedTimer _t_kokkos("io", "Kokkos", "ScopeGuard");
-    Kokkos::ScopeGuard guard(argc, argv);
-    _t_kokkos.stop();
+    //
+    {
+        ScopedTimer _t("io", "Kokkos", "ScopeGuard");
+        Kokkos::ScopeGuard guard(argc, argv);
+    }
 
+    Configuration config;
     if (argc == 1) {
-        // Configuration config;
-        // config.print_help_message();
-        // return 0;
+        config.print_help_message();
+        return 0;
+        //
         {
-            ScopedTimer _t_read_args("io", "Configuration", "read_args");
+            ScopedTimer _t("io", "Configuration", "read_args");
 
             std::vector<std::pair<std::string, std::string> > input = {
-                {"--graph", "../../GraPaRepo/data/mapping/rgg24.graph"}, // SharedMap comm cost 10 243 578
-                {"--mapping", "../data/out/partition/rgg24.txt"},
-                {"--statistics", "../data/out/statistics/rgg24.JSON"},
-                // {"--graph", "../../graph_collection/mapping/2cubes_sphere.mtx.graph"},
-                // {"--mapping", "../data/out/partition/2cubes_sphere.mtx.graph"},
-                // {"--statistics", "../data/out/statistics/2cubes_sphere.mtx.JSON"},
+                {"--graph", "../../ProMapRepo/data/mapping/rgg23.graph"}, // comm cost 9543754, 1098 ms
+                {"--mapping", "../data/out/partition/rgg23.txt"},
+                {"--statistics", "../data/out/statistics/rgg23.JSON"},
                 {"--hierarchy", "4:8:6"},
                 {"--distance", "1:10:100"},
                 {"--imbalance", "0.03"},
@@ -87,41 +87,48 @@ int main(int argc, char *argv[]) {
                 std::strcpy(argv_temp[i], args[i].c_str());
             }
 
-            Configuration config(argc_temp, argv_temp);
-            _t_read_args.stop();
-
-            if (config.config == "IM") {
-                IM_Solver(config).solve();
-            } else if (config.config == "HM" || config.config == "HM-ultra") {
-                HM_Solver(config).solve();
-            } else {
-                std::cerr << "Error: Invalid config" << std::endl;
-                exit(EXIT_FAILURE);
-            }
+            config = Configuration(argc_temp, argv_temp);
 
             ScopedTimer _t_cleanup("io", "main", "cleanup");
             for (int i = 0; i < argc_temp; ++i) { delete[] argv_temp[i]; }
             delete[] argv_temp;
         }
     } else {
-        ScopedTimer _t_read_args("io", "main", "read_args");
-        Configuration config(argc, argv);
-        _t_read_args.stop();
+        ScopedTimer _t("io", "main", "read_args");
+        config = Configuration(argc, argv);
+    }
 
-        if (config.config == "IM") {
-            IM_Solver(config).solve();
-        } else if (config.config == "HM" || config.config == "HM-ultra") {
-            HM_Solver(config).solve();
-        } else {
-            std::cerr << "Error: Invalid config" << std::endl;
-            exit(EXIT_FAILURE);
-        }
+    if (config.config == "IM") {
+        HostGraph g(config.graph_in);
+        std::cout << "Read graph in     : " << get_milli_seconds(sp, get_time_point()) << std::endl;
+
+        auto sp_solve = get_time_point();
+        HostPartition host_partition = IM_Solver(config).solve(g);
+        std::cout << "Solved in         : " << get_milli_seconds(sp_solve, get_time_point()) << std::endl;
+
+        auto sp_write = get_time_point();
+        write_partition(host_partition, g.n, config.mapping_out);
+        std::cout << "Written in        : " << get_milli_seconds(sp_write, get_time_point()) << std::endl;
+    } else if (config.config == "HM" || config.config == "HM-ultra") {
+        HM_HostGraph g(config.graph_in);
+        std::cout << "Read graph in     : " << get_milli_seconds(sp, get_time_point()) << std::endl;
+
+        auto sp_solve = get_time_point();
+        JetHostPartition jet_host_partition = HM_Solver(config).solve(g);
+        std::cout << "Solved in         : " << get_milli_seconds(sp_solve, get_time_point()) << std::endl;
+
+        auto sp_write = get_time_point();
+        write_partition(jet_host_partition, (size_t) g.n, config.mapping_out);
+        std::cout << "Written in        : " << get_milli_seconds(sp_write, get_time_point()) << std::endl;
+    } else {
+        std::cerr << "Error: Invalid config" << std::endl;
+        exit(EXIT_FAILURE);
     }
 
     Profiler::instance().print_table_ascii_colored(std::cout);
 
     auto ep = get_time_point();
-    std::cout << "Total Time: " << get_seconds(sp, ep) << " seconds." << std::endl;
+    std::cout << "Total Time in main.cpp : " << get_seconds(sp, ep) << " seconds." << std::endl;
 
     return 0;
 }
