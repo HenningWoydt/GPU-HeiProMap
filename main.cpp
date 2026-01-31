@@ -39,17 +39,16 @@ int main(int argc, char *argv[]) {
     auto sp = get_time_point();
     std::ios::sync_with_stdio(false);
     std::cout.tie(nullptr);
-
     //
     {
-        ScopedTimer _t("io", "Kokkos", "ScopeGuard");
-        Kokkos::ScopeGuard guard(argc, argv);
+        ScopedTimer _t("io", "main", "Kokkos::initialize");
+        Kokkos::initialize();
     }
 
     Configuration config;
     if (argc == 1) {
         config.print_help_message();
-        return 0;
+        // return 0;
         //
         {
             ScopedTimer _t("io", "Configuration", "read_args");
@@ -123,6 +122,13 @@ int main(int argc, char *argv[]) {
     } else {
         std::cerr << "Error: Invalid config" << std::endl;
         exit(EXIT_FAILURE);
+    }
+
+    Kokkos::fence();
+    //
+    {
+        ScopedTimer _t("io", "main", "Kokkos::finalize");
+        Kokkos::finalize();
     }
 
     Profiler::instance().print_table_ascii_colored(std::cout);
