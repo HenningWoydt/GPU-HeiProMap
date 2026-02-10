@@ -53,7 +53,6 @@ namespace GPU_HeiProMap {
         PartitionManager p_manager;
         DistanceOracle d_oracle;
 
-        f64 io_ms = 0.0;
         f64 misc_ms = 0.0;
         f64 coarsening_ms = 0.0;
         f64 contraction_ms = 0.0;
@@ -138,7 +137,6 @@ namespace GPU_HeiProMap {
             // std::cout << "#empty partitions : " << n_empty_partitions << std::endl;
             // std::cout << "#oload partitions : " << n_overloaded_partitions << std::endl;
             // std::cout << "Sum oload weights : " << sum_too_much << std::endl;
-            std::cout << "IO            : " << io_ms << std::endl;
             std::cout << "Misc          : " << misc_ms << std::endl;
             std::cout << "Coarsening    : " << coarsening_ms << std::endl;
             std::cout << "Contraction   : " << contraction_ms << std::endl;
@@ -153,10 +151,6 @@ namespace GPU_HeiProMap {
         void initialize(HostGraph &host_g) {
             auto p = get_time_point();
 
-            io_ms += get_milli_seconds(p, get_time_point());
-
-            auto p1 = get_time_point();
-
             lmax = (weight_t) std::ceil((1.0 + config.imbalance) * ((f64) host_g.g_weight / (f64) config.k));
 
             device_graphs.emplace_back(initialize_device_g(host_g));
@@ -164,7 +158,7 @@ namespace GPU_HeiProMap {
             p_manager = initialize_p_manager(device_graphs.back().n, config.k, lmax);
             d_oracle = initialize_d_oracle(config.k, config.hierarchy, config.distance);
 
-            misc_ms += get_milli_seconds(p1, get_time_point());
+            misc_ms += get_milli_seconds(p, get_time_point());
 
             assert_state_pre_partition(device_graphs.back(), d_oracle, config.hierarchy, config.distance);
         }

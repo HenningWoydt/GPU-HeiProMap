@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
 
             std::vector<std::pair<std::string, std::string> > input = {
                 {"--graph", "../../ProMapRepo/data/mapping/rgg23.graph"}, // comm cost 9543754, 1098 ms
-                {"--mapping", "../data/out/partition/rgg23.txt"},
+                {"--mapping", "rgg23.txt"},
                 {"--hierarchy", "4:8:6"},
                 {"--distance", "1:10:100"},
                 {"--imbalance", "0.03"},
@@ -104,9 +104,11 @@ int main(int argc, char *argv[]) {
         HostPartition host_partition = IM_Solver(config).solve(g);
         std::cout << "Solved in         : " << get_milli_seconds(sp_solve, get_time_point()) << std::endl;
 
-        auto sp_write = get_time_point();
-        write_partition(host_partition, g.n, config.mapping_out);
-        std::cout << "Written in        : " << get_milli_seconds(sp_write, get_time_point()) << std::endl;
+        if (config.is_set("--mapping")) {
+            auto sp_write = get_time_point();
+            write_partition(host_partition, g.n, config.mapping_out);
+            std::cout << "Written in        : " << get_milli_seconds(sp_write, get_time_point()) << std::endl;
+        }
     } else if (config.config == "HM" || config.config == "HM-ultra") {
         HM_HostGraph g(config.graph_in);
         std::cout << "Read graph in     : " << get_milli_seconds(sp, get_time_point()) << std::endl;
@@ -115,9 +117,11 @@ int main(int argc, char *argv[]) {
         JetHostPartition jet_host_partition = HM_Solver(config).solve(g);
         std::cout << "Solved in         : " << get_milli_seconds(sp_solve, get_time_point()) << std::endl;
 
-        auto sp_write = get_time_point();
-        write_partition(jet_host_partition, (size_t) g.n, config.mapping_out);
-        std::cout << "Written in        : " << get_milli_seconds(sp_write, get_time_point()) << std::endl;
+        if (config.is_set("--mapping")) {
+            auto sp_write = get_time_point();
+            write_partition(jet_host_partition, (size_t) g.n, config.mapping_out);
+            std::cout << "Written in        : " << get_milli_seconds(sp_write, get_time_point()) << std::endl;
+        }
     } else {
         std::cerr << "Error: Invalid config" << std::endl;
         exit(EXIT_FAILURE);
