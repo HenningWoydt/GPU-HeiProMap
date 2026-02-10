@@ -56,7 +56,6 @@ int main(int argc, char *argv[]) {
             std::vector<std::pair<std::string, std::string> > input = {
                 {"--graph", "../../ProMapRepo/data/mapping/rgg23.graph"}, // comm cost 9543754, 1098 ms
                 {"--mapping", "../data/out/partition/rgg23.txt"},
-                {"--statistics", "../data/out/statistics/rgg23.JSON"},
                 {"--hierarchy", "4:8:6"},
                 {"--distance", "1:10:100"},
                 {"--imbalance", "0.03"},

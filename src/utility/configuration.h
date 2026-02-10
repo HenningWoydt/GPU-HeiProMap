@@ -51,7 +51,6 @@ namespace GPU_HeiProMap {
             {"--help", "", "Produces the help message", "", "", false},
             {"--graph", "-g", "Filepath to the graph.", "", "", false},
             {"--mapping", "-m", "Output filepath to the generated mapping.", "", "", false},
-            {"--statistics", "", "Output filepath to the statistics file.", "GPU-HeiProMap_stats.JSON", "", false},
             {"--hierarchy", "-h", "Hierarchy in the form a1:a2:...:al .", "", "", false},
             {"--distance", "-d", "Distance in the form d1:d2:...:dl .", "", "", false},
             {"--imbalance", "-e", "Allowed imbalance (for example 0.03).", "0.03", "", false},
@@ -63,7 +62,6 @@ namespace GPU_HeiProMap {
         // graph information
         std::string graph_in;
         std::string mapping_out;
-        std::string statistics_out;
 
         // hierarchy information
         std::string hierarchy_string;
@@ -115,7 +113,6 @@ namespace GPU_HeiProMap {
             // extract info
             graph_in = get("--graph");
             mapping_out = get("--mapping");
-            statistics_out = get("--statistics");
 
             hierarchy_string = get("--hierarchy");
             hierarchy = convert<partition_t>(split(hierarchy_string, ':'));
@@ -232,7 +229,6 @@ namespace GPU_HeiProMap {
 
             s += tabs + to_JSON_MACRO(graph_in);
             s += tabs + to_JSON_MACRO(mapping_out);
-            s += tabs + to_JSON_MACRO(statistics_out);
             s += tabs + to_JSON_MACRO(hierarchy_string);
             s += tabs + to_JSON_MACRO(hierarchy);
             s += tabs + to_JSON_MACRO(k);

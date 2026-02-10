@@ -103,16 +103,14 @@ namespace GPU_HeiProMap {
                 refinement(max_level, level);
             }
 
-            ScopedTimer _t_write("io", "IM_Solver", "write_partition");
+            ScopedTimer _t_write("io", "IM_Solver", "download_partition");
             auto p = get_time_point();
             HostPartition host_partition = HostPartition(Kokkos::view_alloc(Kokkos::WithoutInitializing, "host_partition"), device_graphs.back().n);
             Kokkos::deep_copy(host_partition, p_manager.partition);
+            Kokkos::fence();
 
             misc_ms += get_milli_seconds(p, get_time_point());
 
-            auto p1 = get_time_point();
-            write_partition(host_partition, device_graphs.back().n, config.mapping_out);
-            io_ms += get_milli_seconds(p1, get_time_point());
             _t_write.stop();
 
             auto ep = get_time_point();
@@ -123,23 +121,23 @@ namespace GPU_HeiProMap {
             std::cout << "#Edges            : " << device_graphs.back().m << std::endl;
             std::cout << "k                 : " << config.k << std::endl;
             std::cout << "Lmax              : " << lmax << std::endl;
-            std::cout << "Init. comm-cost   : " << initial_comm_cost << std::endl;
-            std::cout << "Init. max block w : " << initial_max_block_weight << std::endl;
-            std::cout << "Final comm-cost   : " << comm_cost(device_graphs.back(), p_manager, d_oracle) << std::endl;
-            std::cout << "Final max block w : " << max_weight(p_manager) << std::endl;
+            // std::cout << "Init. comm-cost   : " << initial_comm_cost << std::endl;
+            // std::cout << "Init. max block w : " << initial_max_block_weight << std::endl;
+            // std::cout << "Final comm-cost   : " << comm_cost(device_graphs.back(), p_manager, d_oracle) << std::endl;
+            // std::cout << "Final max block w : " << max_weight(p_manager) << std::endl;
 
-            size_t n_empty_partitions = 0;
-            size_t n_overloaded_partitions = 0;
-            weight_t sum_too_much = 0;
-            HostPartitionManager partition_host = to_host_p_manager(p_manager);
-            for (partition_t id = 0; id < config.k; ++id) {
-                n_empty_partitions += partition_host.bweights(id) == 0;
-                n_overloaded_partitions += partition_host.bweights(id) > lmax;
-                sum_too_much += std::max((weight_t) 0, partition_host.bweights(id) - lmax);
-            }
-            std::cout << "#empty partitions : " << n_empty_partitions << std::endl;
-            std::cout << "#oload partitions : " << n_overloaded_partitions << std::endl;
-            std::cout << "Sum oload weights : " << sum_too_much << std::endl;
+            // size_t n_empty_partitions = 0;
+            // size_t n_overloaded_partitions = 0;
+            // weight_t sum_too_much = 0;
+            // HostPartitionManager partition_host = to_host_p_manager(p_manager);
+            // for (partition_t id = 0; id < config.k; ++id) {
+            //     n_empty_partitions += partition_host.bweights(id) == 0;
+            //     n_overloaded_partitions += partition_host.bweights(id) > lmax;
+            //     sum_too_much += std::max((weight_t) 0, partition_host.bweights(id) - lmax);
+            // }
+            // std::cout << "#empty partitions : " << n_empty_partitions << std::endl;
+            // std::cout << "#oload partitions : " << n_overloaded_partitions << std::endl;
+            // std::cout << "Sum oload weights : " << sum_too_much << std::endl;
             std::cout << "IO            : " << io_ms << std::endl;
             std::cout << "Misc          : " << misc_ms << std::endl;
             std::cout << "Coarsening    : " << coarsening_ms << std::endl;
@@ -147,26 +145,6 @@ namespace GPU_HeiProMap {
             std::cout << "Init. Part.   : " << initial_partitioning_ms << std::endl;
             std::cout << "Uncontraction : " << uncontraction_ms << std::endl;
             std::cout << "Refinement    : " << refinement_ms << std::endl;
-
-            std::string config_JSON = config.to_JSON();
-            std::string profile_JSON = Profiler::instance().to_JSON();
-
-            // Combine manually into a single JSON string
-            std::string combined_JSON = "{\n";
-            combined_JSON += "  \"config\": " + config_JSON + ",\n";
-            combined_JSON += "  \"profile\": " + profile_JSON + "\n";
-            combined_JSON += "}";
-
-            // Save to file
-            if (config.is_set("--statistics")) {
-                std::ofstream outFile(config.statistics_out);
-                if (outFile.is_open()) {
-                    outFile << combined_JSON;
-                    outFile.close();
-                } else {
-                    std::cerr << "Error: Could not open " << config.statistics_out << " to write statistics!" << std::endl;
-                }
-            }
 
             return host_partition;
         }

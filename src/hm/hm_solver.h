@@ -48,32 +48,6 @@ namespace GPU_HeiProMap {
             // solve problem
             JetHostPartition partition = internal_solve(g);
 
-            // write output
-            ScopedTimer _t_write("io", "HM_Solver", "write_partition");
-            write_partition(partition, (size_t) g.n, config.mapping_out);
-            _t_write.stop();
-
-            std::string config_JSON = config.to_JSON();
-            std::string profile_JSON = Profiler::instance().to_JSON();
-
-            // Combine manually into a single JSON string
-            std::string combined_JSON = "{\n";
-            combined_JSON += "  \"config\": " + config_JSON + ",\n";
-            combined_JSON += "  \"profile\": " + profile_JSON + "\n";
-            combined_JSON += "}";
-
-            std::cout << combined_JSON << std::endl;
-            // Save to file
-            if (config.is_set("--statistics")) {
-                std::ofstream outFile(config.statistics_out);
-                if (outFile.is_open()) {
-                    outFile << combined_JSON;
-                    outFile.close();
-                } else {
-                    std::cerr << "Error: Could not open " << config.statistics_out << " to write statistics!" << std::endl;
-                }
-            }
-
             return partition;
         }
 
